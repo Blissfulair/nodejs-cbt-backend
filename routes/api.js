@@ -167,12 +167,6 @@ router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(r
 })
 router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
     const {reg_no,s1,s2,s3,s4,paper_type} = req.params
-    // const total = Result::where([
-    //     'reg_no'=>$reg_no,
-    //     'paper_type'=>$paper_type,
-    //     'day'=>date('Ymd')
-    // ])->get();
-    // $subj1 = Subject::where('name', $subject1)->first();
     const subject1 = await Result.findAll({where:{
         reg_no:reg_no,
         paper_type:paper_type,
@@ -197,24 +191,6 @@ router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
         day:today,
         subject_id:s4
     }})
-    // $subj2 = Subject::where('name', $subject2)->first();
-    // $subject2 = Result::where([
-    //     'reg_no'=>$reg_no,
-    //     'paper_type'=>$paper_type,
-    //     'day'=>date('Ymd')
-    // ])->where('subject_id', $subj2->id)->get();
-    // $subj3 = Subject::where('name', $subject3)->first();
-    // $subject3 = Result::where([
-    //     'reg_no'=>$reg_no,
-    //     'paper_type'=>$paper_type,
-    //     'day'=>date('Ymd')
-    // ])->where('subject_id', $subj3->id)->get();
-    // $subj4 = Subject::where('name', $subject4)->first();
-    // $subject4 = Result::where([
-    //     'reg_no'=>$reg_no,
-    //     'paper_type'=>$paper_type,
-    //     'day'=>date('Ymd')
-    // ])->where('subject_id', $subj4->id)->get();
     return res.status(200).json({results:{
         subject1:subject1,
         subject2:subject2,
