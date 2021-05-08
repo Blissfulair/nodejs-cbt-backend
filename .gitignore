@@ -1,6 +1,8 @@
-/public/uploads/admin
-/public/uploads/questions
-/public/uploads/candidates
+
 .env
 /node_modules
 *.sqlite
+*.jpg
+*.png
+*.jpeg
+*.xlsx

@@ -1,5 +1,6 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
+const {Op} = require('sequelize')
 const jwt = require('jsonwebtoken')
 require('../helpers')
 const Cbt = require('../models/cbt')
@@ -15,10 +16,12 @@ require('../models/mathematics')
 require('../models/chemistry')
 require('../models/physics')
 const authMiddleware = require('../middleware/auth')
+const authMiddleware2 = require('../middleware/auth2')
 const date = new Date()
-const today = date.getFullYear()+''+(date.getMonth()+1)+''+(date.getDate()<10?'0'+date.getDate():date.getDate())
+const month = date.getMonth()+1
+const today = date.getFullYear()+''+(month<10?'0'+month:month)+''+(date.getDate()<10?'0'+date.getDate():date.getDate())
+const reg = date.getFullYear()+''+(month<10?'0'+month:month)
 const router = express.Router()
-console.log(today)
 /**
  * ##############################################################
  * FRONTEND
@@ -266,10 +269,180 @@ router.post('/save_answers', async(req,res)=>{
     }
     catch(e){console.log(e)}
 })
+router.patch('/end_exam', async(req, res)=>{
+    const {reg_no} =req.body
+    try{
+        const activity = await Activity.findOne({where:{reg_no:reg_no,day:today}});
+        if(activity){
+            if(activity.time_left > 0){
+            activity.time_left = 0;
+            }
+            activity.submitted = 1;
+            if(activity.save()){
+                return res.status(200).json({status:'success', message:'successfully submited', activity:activity});
+            }
+        }
+    }
+    catch(e){
+        console.log(e)
+    }
+})
 /**
  * ##############################################################
  * BACKEND
  * ##############################################################
  */
+ router.post('/admin_login', async(req,res)=>{
+    const {email,password} = req.body;
+    try{
+        const admin = await Admin.findOne({where:{email:email}})
+        if(admin){
+           const login =  await bcrypt.compare(password, admin.password)
+            if(login){
+                    return res.status(200).json({message:'successful', status:200, token:jwt.sign({adminId:admin.id}, 'cbt')});
+                }else{
+                    return res.status(200).json({message:'not logged in', status:200});
+                }
+                
+            //}
+        }
+        return res.status(200).json({status:404, message:'User not found'});
+    }
+    catch(e){console.log(e)}
+})
+router.get('/token2', authMiddleware2, (req, res)=>{
+    res.status(200).json({
+        id:req.admin.id,
+        email:req.admin.email,
+        image:req.admin.image,
+        name:req.admin.name,
+        message:'Logged in successfully'
+    })
+})
+
+router.get('/subjects', async(req,res)=>{
+    try{
+        const subjects = await Subject.findAll();
+        const end = 'ABCDEFGHIABCEDFIHHIECDAIEFCAEF'.shuffle().substr(5,2);
+        let reg_no = 'GL'+reg;
+        const cand = await User.findAll({where:{reg_no:{
+            [Op.like]:reg_no+'%'
+        }}});
+        if(cand.length< 10)
+            reg_no += '00'+cand.length+end;
+        else if(cand.length >= 10 && cand.length < 100)
+            reg_no += '0'+cand.length+end;
+        else
+            reg_no += cand.length+end;
+        return res.status(200).json({subjects:subjects, reg_no:reg_no});
+    }
+    catch(e){console.log}
+})
+
+router.post('/save_candidate', async(req,res)=>{
+    const {name,email,phone,reg_no} = req.body
+    try{
+        const subjects = JSON.parse(req.body.subjects);
+        const subjectsID = JSON.parse(req.body.subjectsID)
+        let filename = null;
+        //$file = $request->file('file');
+        const password = await bcrypt.hash(reg_no, bcrypt.genSaltSync(8));
+        let candidate = await User.findOne({where:{name:name,email:email}})
+        if(!candidate){
+            candidate = await User.create({
+                name:name,
+                phone:phone,
+                email:email,
+                reg_no:reg_no,
+                subject1:subjects[0],
+                subject2:subjects[1],
+                subject3:subjects[2],
+                subject4:subjects[3],
+                subject1_id:subjectsID[0],
+                subject2_id:subjectsID[1],
+                subject3_id:subjectsID[2],
+                subject4_id:subjectsID[3],
+                image:filename,
+                password:password
+            });
+            if(candidate){
+                return res.status(200).json({message:'successful'});
+            }
+        }
+        if(candidate){
+            return res.status(200).json({message:'User Already Exists'});
+        }else{
+            return res.status(200).json({message:'Operation was not successful'});
+        }
+    }
+    catch(e){console.log}
+})
+
+router.get('/candidates/:limit/:offset', async(req,res)=>{
+    const {offset,limit} = req.params
+    try{
+        const num = offset * limit;
+        const candidates = await User.findAll({order:[['createdAt', 'DESC']],limit:limit,offset:num})
+        return res.status(200).json({candidates:candidates});
+    }
+    catch(e){console.log}
+})
+router.get('/candidate/:id', async(req,res)=>{
+    const {id}=req.params
+    try{
+        const candidate = await User.findByPk(id);
+        return res.status(200).json({candidate:candidate});
+    }
+    catch(e){console.log}
+})
+
+router.post('/candidate_update', async(req,res)=>{
+    const {name,email,phone,user_id} = req.body
+    try{
+        const subjects = JSON.parse(req.body.subjects);
+        const subjectsID = JSON.parse(req.body.subjectsID)
+        let filename = null;
+        //$file = $request->file('file');
+
+        const candidate = await User.findByPk(user_id);
+        if(name != '')
+        candidate.name= name;
+        if(email != '')
+        candidate.email= email;
+        if(phone != '')
+        candidate.phone= phone;
+        if(filename)
+        candidate.image= filename;
+        if(subjects.length>1){
+            candidate.subject2= subjects[1];
+            candidate.subject3= subjects[2];
+            candidate.subject4= subjects[3];
+            candidate.subject2_id= subjectsID[1];
+            candidate.subject3_id= subjectsID[2];
+            candidate.subject4_id= subjectsID[3];
+        }
+        // candidate.subject2= $request->subject2;
+        // candidate.subject3= $request->subject3;
+        // candidate.subject4= $request->subject4;
+        if(candidate.save()){
+            return res.status(200).json({message:'successful'});
+        }else{
+            return res.status(200).json({message:'failed'});
+        }
+    }
+    catch(e){console.log}
+})
+
+router.get('/destroy_candidate/:id', async(req,res)=>{
+    const {id} =req.params
+    try{
+        const candidate = await User.findByPk(id);
+        if(candidate.destroy())
+            return res.status(200).json({message:'successful'});
+        else
+            return res.status(200).json({message:'Delete Operation Failed'});
+    }
+    catch(e){console.log}
+})
 
 module.exports = router
