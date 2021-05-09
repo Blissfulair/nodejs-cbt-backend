@@ -2,6 +2,9 @@ const express = require('express')
 const bcrypt = require('bcryptjs')
 const {Op} = require('sequelize')
 const jwt = require('jsonwebtoken')
+const fs = require('fs')
+const path = require('path')
+const modelGenerator = require('../generator')
 require('../helpers')
 const Cbt = require('../models/cbt')
 const User = require('../models/user')
@@ -10,7 +13,9 @@ const Admin = require('../models/admin')
 const Result = require('../models/result')
 const Setting = require('../models/setting')
 const Subject = require('../models/subject')
-
+Activity.hasMany(Result, {foreignKey:'reg_no', sourceKey:'reg_no'})
+Result.belongsTo(Activity, {foreignKey:'reg_no', targetKey:'reg_no'})
+Activity.belongsTo(User, {foreignKey:'reg_no', targetKey:'reg_no'})
 require('../models/english')
 require('../models/mathematics')
 require('../models/chemistry')
@@ -541,7 +546,144 @@ router.get('/destroy_question/:subject_id/:question_id', async(req,res)=>{
 })
 router.post('/save_subject', async(req,res)=>{
     
+    const {name} = req.body
+    const model = name.charAt(0).toUpperCase()+name.substr(1)
+    const content = modelGenerator(model)
+    let subject = await Subject.findOne({where:{name:name}});
+    if(!subject){
+       subject = await Subject.create({
+            name:name,
+            model:name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')
+       });
+        if(subject)
+            {
+                try{
+                    await fs.writeFileSync(__dirname+`/../models/${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}.js`,content)
+                    
+                    return res.status(200).json({message:`subject ${name} was created successfully`});
+                }
+                catch(e){
+                    console.log(e)
+                }
+
+            }
+        else
+            return res.status(200).json({message:`subject ${name} failed to create`});
+    }else
+        return res.status(200).json({message:`subject ${name} already exists`});
 })
+router.get('/manage_results/:limit/:offset', async(req,res)=>{
+    const {limit,offset} = req.params
+    try{
+        const num = offset * limit;
+        const results = await Activity.findAll({attributes:['day'],order:[['createdAt', 'DESC']],group:['day'], limit:limit, offset:num})
+        return res.status(200).json({results:results});
+    }
+    catch(e){console.log}
+})
+router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
+    const {day,limit,offset} = req.params
+    try{
+        num = offset * limit;
+        let details = {};
+        const count = await Activity.findAll({where:{day:day}});
+        const submitted = await Activity.findAll({where:{submitted:1, day:day}});
+        const results = await Activity.findAll({where:{day:day}, limit:limit, offset:num, include:[User,Result]});
+ 
+        results.forEach((result)=>{
+            const subject_id1 =result.user.subject1_id;
+            const subject_id2=result.user.subject2_id;
+            const subject_id3 =result.user.subject3_id;
+            const subject_id4 =result.user.subject4_id;
+            const attempted = result.results.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
 
-
+            const c1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
+            const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
+            const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
+            const qt4 = qtotal4.length> 0? qtotal4[0].amount: 1
+            const total1 = Math.ceil(c1.length*(100/ (qt1)));
+            const total2 = Math.ceil(c2.length*(100/ (qt2)));
+            const total3 = Math.ceil(c3.length*(100/ (qt3)));
+            const total4 = Math.ceil(c4.length*(100/ (qt4)));
+            details[result.reg_no] = {
+                name:result.user.name,
+                subject1:result.user.subject1,
+                subject2:result.user.subject2,
+                subject3:result.user.subject3,
+                subject4:result.user.subject4,
+                qtotal1:qt1,
+                qtotal2:qt2,
+                qtotal3:qt3,
+                qtotal4:qt4,
+                total1:total1,
+                total2:total2,
+                total3:total3,
+                total4:total4,
+                qtotal:qt1+qt2+qt3+qt4,
+                //'qtotal'=>'180',
+                total:total1+total2+total3+total4,
+                submitted:result.submitted?'<span class="btn btn-primary btn-xs">true</span>':'<span class="btn btn-danger btn-xs">false</span>',
+                attempted:attempted.length,
+            };
+        })
+        details['count']=count.length;
+        details['submitted']=submitted.length;
+        return res.status(200).json({results:results, details:details})
+    }
+    catch(e){console.log}
+})
+router.get('/update_setting/:mode', async(req,res)=>{
+    const {mode} = req.params
+    try{
+        const setting = await Setting.findByPk(1);
+        setting.type= mode;
+        if(setting.save()){
+            return res.status(200).json({message:'sucessful'});
+        }else{
+            return res.status(200).json({message:'failed'});
+        }
+    }
+    catch(e){console.log}
+})
+router.post('/center', async(req,res)=>{
+    const {name} = req.body
+    try{
+        let center = await Cbt.findByPk(1);
+        if(!center){
+            center = await Cbt.create({
+                            name:name
+            });
+            if(center)
+                return res.status(200).json({message:'Created Successfully'});
+        }else{
+            center.name = name;
+            if(center.save())
+                return res.status(200).json({message:'Updated Successfully'});
+        }
+    }
+    catch(e){console.log}
+})
+router.get('/relogin/:reg_no', async(req,res)=>{
+    const {reg_no} = req.params
+    const user = await Activity.findOne({where:{reg_no:reg_no, day:today}, order:[['createdAt', 'DESC']]});
+    if(user){
+        const type = user.paper_type >= 2? 0 : (user.paper_type)+1;
+        user.submitted = 0;
+        user.paper_type = type;
+        user.time_left = 120;
+        if(user.save())
+            return res.status(200).json({message:'successful'});
+        else
+            return res.status(200).json({message:'Re-Login Failed, Please Try Again!!'});
+    }
+    return res.status(200).json({message:'This Candidate Has Not Started Exam'});
+})
 module.exports = router
