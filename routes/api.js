@@ -445,4 +445,103 @@ router.get('/destroy_candidate/:id', async(req,res)=>{
     catch(e){console.log}
 })
 
+
+router.post('/save_question', async(req,res)=>{
+        const {question,a,b,c,d,answer} = req.body
+       let filename = null;
+    //    $file = $request->file('file');
+
+          const subject = await Subject.findByPk(req.body.subject);
+          const check_exist = await require(`../models/${subject.model}`).findOne({where:{question:question}});
+          if(!check_exist){
+              if(subject){
+                  const quest= await require(`../models/${subject.model}`).create({
+                       question:question,
+                       a:a,
+                       b:b,
+                       c:c,
+                       d:d,
+                       answer:answer.toLowerCase(),
+                       paper_type: '012'.shuffle().substr(0,1),
+                       image:filename
+                  });
+                   if(quest)
+                       return res.status(200).json({message:'successful'});
+                   else
+                       return res.status(200).json({message:'Post  failed to create'});
+               }else
+                   return res.status(200).json({message:'Post post with this title already exists'});
+   
+          }
+})
+router.post('/update_question', async(req,res)=>{
+    const {question,a,b,c,d,answer,question_id, paper_type} = req.body
+    try{
+        let filename = null;
+        //  $file = $request->file('file');
+
+            const subject = await Subject.findByPk(req.body.subject);
+            const quest = await require(`../models/${subject.model}`).findByPk(question_id);
+            if(quest){
+                if(quest != '')
+                quest.question=question;
+                if(a != '')
+                quest.a=a;
+                if(b != '')
+                quest.b=b;question
+                if(c != '')
+                quest.c=c;
+                if(d != '')
+                quest.d=d;
+                if(answer != '')
+                quest.answer=answer.toLowerCase();
+                if(paper_type != '')
+                quest.paper_type=paper_type;//substr(str_shuffle('0123456789'), 5,1),
+                if(filename)
+                quest.image=filename;
+                    if(quest.save())
+                        return res.status(200).json({message:'successful'});
+                    else
+                        return res.status(200).json({message:'Post  failed to update'});
+
+            }
+    }
+    catch(e){console.log}
+})
+router.get('/manage_question/:id/:limit/:offset', async(req,res)=>{
+    const {id,limit,offset} = req.params
+    try{
+        const num = offset * limit;
+            const subject = await Subject.findByPk(id);
+            const questions = await require(`../models/${subject.model}`).findAll({order:[['createdAt', 'DESC']], limit:limit, offset:num});
+            return res.status(200).json({message:'updated', subject:subject.name, questions:questions});
+    }
+    catch(e){console.log}
+})
+router.get('/get_question/:subject_id/:question_id', async(req,res)=>{
+    const {subject_id,question_id} = req.params
+    try{
+        const subject = await Subject.findByPk(subject_id);
+        const question = await require(`../models/${subject.model}`).findByPk(question_id);
+        return res.status(200).json({question:question});
+    }
+    catch(e){console.log}
+})
+router.get('/destroy_question/:subject_id/:question_id', async(req,res)=>{
+    const {subject_id,question_id} = req.params
+    try{
+        const subject = await Subject.findByPk(subject_id);
+        const question = await require(`../models/${subject.model}`).findByPk(question_id);
+        if(question.destroy())
+        return res.status(200).json({message:'successful'});
+    else
+        return res.status(200).json({message:'Delete Operation Failed'});
+    }
+    catch(e){console.log}
+})
+router.post('/save_subject', async(req,res)=>{
+    
+})
+
+
 module.exports = router
