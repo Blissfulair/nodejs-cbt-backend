@@ -1,10 +1,13 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
 const {Op} = require('sequelize')
+const db = require('../db/config')
+const queryInterface = db.getQueryInterface()
 const jwt = require('jsonwebtoken')
 const fs = require('fs')
 const path = require('path')
 const modelGenerator = require('../generator')
+const tableGenerator = require('../table')
 require('../helpers')
 const Cbt = require('../models/cbt')
 const User = require('../models/user')
@@ -16,10 +19,11 @@ const Subject = require('../models/subject')
 Activity.hasMany(Result, {foreignKey:'reg_no', sourceKey:'reg_no'})
 Result.belongsTo(Activity, {foreignKey:'reg_no', targetKey:'reg_no'})
 Activity.belongsTo(User, {foreignKey:'reg_no', targetKey:'reg_no'})
-require('../models/english')
-require('../models/mathematics')
-require('../models/chemistry')
-require('../models/physics')
+
+const Excel = require('excel4node')
+const wb = new Excel.Workbook()
+const ws = wb.addWorksheet('Sheet 1')
+
 const authMiddleware = require('../middleware/auth')
 const authMiddleware2 = require('../middleware/auth2')
 const date = new Date()
@@ -549,17 +553,19 @@ router.post('/save_subject', async(req,res)=>{
     const {name} = req.body
     const model = name.charAt(0).toUpperCase()+name.substr(1)
     const content = modelGenerator(model)
+    const tableContent = tableGenerator()
     let subject = await Subject.findOne({where:{name:name}});
+    const filename = name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')
     if(!subject){
        subject = await Subject.create({
             name:name,
-            model:name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')
+            model:filename
        });
         if(subject)
             {
                 try{
-                    await fs.writeFileSync(__dirname+`/../models/${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}.js`,content)
-                    
+                    await fs.writeFileSync(__dirname+`/../models/${filename}.js`,content)
+                    queryInterface.createTable(filename,tableContent)
                     return res.status(200).json({message:`subject ${name} was created successfully`});
                 }
                 catch(e){
@@ -685,5 +691,30 @@ router.get('/relogin/:reg_no', async(req,res)=>{
             return res.status(200).json({message:'Re-Login Failed, Please Try Again!!'});
     }
     return res.status(200).json({message:'This Candidate Has Not Started Exam'});
+})
+router.get('/export_candidate/:start/:end', async(req, res)=>{
+    const{start,end}=req.params
+    const candidate = await User.findAll({where:{createdAt:{[Op.gte]:start}, createdAt:{[Op.lte]:end}}});
+    return res.status(200).json({candidate:candidate});
+})
+router.get('/candidate_export/:start/:end', async(req, res)=>{
+    const{start,end}=req.params
+    const center = await Cbt.findByPk(1);
+    const candidates = await User.findAll({where:{createdAt:{[Op.gte]:start}, createdAt:{[Op.lte]:end}}});
+    ws.cell(1,1,1,8, true).string(`LIST OF REGISTERED CANDIDATES FROM ${start} TO ${end}`).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:14},alignment:{horizontal:['center']}})
+    ws.cell(2,1).string('S/N').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,2,2,3, true).string('NAMES').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,4).string('REG NO').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,5,2,8, true).string('SUBJECTS').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    candidates.forEach((candidate, i)=>{
+        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
+        ws.cell(i+3,2,i+3,3, true).string(candidate.name).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,4).string(candidate.reg_no).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
+        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,6).string(candidate.subject2).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,7).string(candidate.subject3).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,8).string(candidate.subject4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+    })
+    return wb.write(`${center.name.toLowerCase()} candidate list for ${start} to ${end}.xlsx`, res)
 })
 module.exports = router
