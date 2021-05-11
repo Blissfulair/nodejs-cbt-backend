@@ -717,4 +717,53 @@ router.get('/candidate_export/:start/:end', async(req, res)=>{
     })
     return wb.write(`${center.name.toLowerCase()} candidate list for ${start} to ${end}.xlsx`, res)
 })
+
+router.get('/export/:day', async(req, res)=>{
+    const{day}=req.params
+    const center = await Cbt.findByPk(1);
+    const results = await Activity.findAll({where:{day:day}, include:[User,Result]});
+    ws.cell(1,1,1,13, true).string(`${center.name} RESULT FOR ${day}`).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:14},alignment:{horizontal:['center']}})
+    ws.cell(2,1).string('S/N').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,2,2,3, true).string('NAME').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,4).string('REG NO').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,5,2,12, true).string('SUBJECTS').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    ws.cell(2,13).string('TOTAL').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    results.forEach((result,i)=>{
+        const subject_id1 =result.user.subject1_id;
+        const subject_id2=result.user.subject2_id;
+        const subject_id3 =result.user.subject3_id;
+        const subject_id4 =result.user.subject4_id;
+        const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+
+        const c1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
+        const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
+        const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
+        const qt4 = qtotal4.length> 0? qtotal4[0].amount: 1
+        const total1 = Math.ceil(c1.length*(100/ (qt1)));
+        const total2 = Math.ceil(c2.length*(100/ (qt2)));
+        const total3 = Math.ceil(c3.length*(100/ (qt3)));
+        const total4 = Math.ceil(c4.length*(100/ (qt4)));
+        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
+        ws.cell(i+3,2,i+3,3, true).string(result.user.name).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,4).string(result.reg_no).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
+        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,6).number(total1).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,7).string(result.user.subject2).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,8).number(total2).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,9).string(result.user.subject3).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,10).number(total3).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,11).string(result.user.subject4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,12).number(total4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,13).number(total1+total2+total3+total4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:12, bold:true},alignment:{horizontal:['center']}})
+    })
+
+    return wb.write(`${center.name.toLowerCase()} result for ${day}.xlsx`, res)
+})
 module.exports = router
