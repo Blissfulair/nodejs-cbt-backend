@@ -5,7 +5,9 @@ const db = require('../db/config')
 const queryInterface = db.getQueryInterface()
 const jwt = require('jsonwebtoken')
 const fs = require('fs')
-const path = require('path')
+const pa = require('path')
+const decompress = require('decompress');
+const readXlsxFile = require('read-excel-file/node')
 const modelGenerator = require('../generator')
 const tableGenerator = require('../table')
 require('../helpers')
@@ -31,6 +33,40 @@ const month = date.getMonth()+1
 const today = date.getFullYear()+''+(month<10?'0'+month:month)+''+(date.getDate()<10?'0'+date.getDate():date.getDate())
 const reg = date.getFullYear()+''+(month<10?'0'+month:month)
 const router = express.Router()
+/**
+ * ########################################################
+ * FUNCTIONS
+ * #######################################################
+ */
+const uploadFile =async(req, path)=>{
+    try{
+        if(req.files){
+            const file = req.files.file;
+           await file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`), (e)=>{
+                if(e)
+                return null
+            })
+            return pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`)
+        }
+        else{
+            return null
+        }
+    }
+    catch(e){console.log(e)}
+}
+const uploadImage =async(req, path)=>{
+    if(req.files){
+        const file = req.files.file;
+        file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.jpg`), (e)=>{
+            if(e)
+            return null
+            return `public/uploads/${path}/${file.md5}.jpg`
+        })
+    }
+    else{
+        return null
+    }
+}
 /**
  * ##############################################################
  * FRONTEND
@@ -765,5 +801,24 @@ router.get('/export/:day', async(req, res)=>{
     })
 
     return wb.write(`${center.name.toLowerCase()} result for ${day}.xlsx`, res)
+})
+router.post('/import_questions', async(req,res)=>{
+    const path = 'db'
+    try{
+        const file = await uploadFile(req, path)
+        const destination = pa.join(__dirname, `/../public/uploads/questions`)
+       if(file){
+           const files = await decompress(file, destination)
+           files.forEach(f=>{
+               if(f.path.includes('.xlsx')){
+                   const rows = await readXlsxFile(destination + f.path)
+               }
+           })
+           fs.unlinkSync(file)
+       }
+       res.status(200).json({m:'he'})
+    }
+    catch(e){console.log(e)}
+    
 })
 module.exports = router
