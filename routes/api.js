@@ -1,6 +1,6 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
-const {Op} = require('sequelize')
+const {Op,or} = require('sequelize')
 const db = require('../db/config')
 const queryInterface = db.getQueryInterface()
 const jwt = require('jsonwebtoken')
@@ -18,6 +18,7 @@ const Admin = require('../models/admin')
 const Result = require('../models/result')
 const Setting = require('../models/setting')
 const Subject = require('../models/subject')
+const Upload = require('../models/upload')
 Activity.hasMany(Result, {foreignKey:'reg_no', sourceKey:'reg_no'})
 Result.belongsTo(Activity, {foreignKey:'reg_no', targetKey:'reg_no'})
 Activity.belongsTo(User, {foreignKey:'reg_no', targetKey:'reg_no'})
@@ -42,11 +43,19 @@ const uploadFile =async(req, path)=>{
     try{
         if(req.files){
             const file = req.files.file;
-           await file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`), (e)=>{
-                if(e)
-                return null
-            })
-            return pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`)
+            const uploaded = await Upload.findOne({where:{file:`${file.md5}.zip`}})
+            if(!uploaded){
+                await file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`), (e)=>{
+                    if(e)
+                    return null
+                })
+                await Upload.create({file:`${file.md5}.zip`})
+                return pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`)
+            }
+            else{
+                return 'file'
+            }
+
         }
         else{
             return null
@@ -55,17 +64,21 @@ const uploadFile =async(req, path)=>{
     catch(e){console.log(e)}
 }
 const uploadImage =async(req, path)=>{
-    if(req.files){
-        const file = req.files.file;
-        file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.jpg`), (e)=>{
-            if(e)
-            return null
+    try{
+        if(req.files){
+            const file = req.files.image;
+            await file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.jpg`), (e)=>{
+                if(e)
+                return null
+            })
             return `public/uploads/${path}/${file.md5}.jpg`
-        })
+    
+        }
+        else{
+            return null
+        }
     }
-    else{
-        return null
-    }
+    catch(e){console.log(e)}
 }
 /**
  * ##############################################################
@@ -390,6 +403,7 @@ router.post('/save_candidate', async(req,res)=>{
         const subjects = JSON.parse(req.body.subjects);
         const subjectsID = JSON.parse(req.body.subjectsID)
         let filename = null;
+        filename = await uploadImage(req,'candidates')
         //$file = $request->file('file');
         const password = await bcrypt.hash(reg_no, bcrypt.genSaltSync(8));
         let candidate = await User.findOne({where:{name:name,email:email}})
@@ -447,7 +461,7 @@ router.post('/candidate_update', async(req,res)=>{
         const subjects = JSON.parse(req.body.subjects);
         const subjectsID = JSON.parse(req.body.subjectsID)
         let filename = null;
-        //$file = $request->file('file');
+        filename = await uploadImage(req,'candidates')
 
         const candidate = await User.findByPk(user_id);
         if(name != '')
@@ -494,7 +508,7 @@ router.get('/destroy_candidate/:id', async(req,res)=>{
 router.post('/save_question', async(req,res)=>{
         const {question,a,b,c,d,answer} = req.body
        let filename = null;
-    //    $file = $request->file('file');
+       filename = await uploadImage(req,'questions')
 
           const subject = await Subject.findByPk(req.body.subject);
           const check_exist = await require(`../models/${subject.model}`).findOne({where:{question:question}});
@@ -523,7 +537,7 @@ router.post('/update_question', async(req,res)=>{
     const {question,a,b,c,d,answer,question_id, paper_type} = req.body
     try{
         let filename = null;
-        //  $file = $request->file('file');
+        filename =  await uploadImage(req,'questions')
 
             const subject = await Subject.findByPk(req.body.subject);
             const quest = await require(`../models/${subject.model}`).findByPk(question_id);
@@ -806,19 +820,142 @@ router.post('/import_questions', async(req,res)=>{
     const path = 'db'
     try{
         const file = await uploadFile(req, path)
-        const destination = pa.join(__dirname, `/../public/uploads/questions`)
+        if(file == 'file')
+        return  res.status(200).json({message:'This file is already uploaded'})
+        const destination = pa.join(__dirname, `/../public/uploads/questions/`)
        if(file){
            const files = await decompress(file, destination)
-           files.forEach(f=>{
+           files.forEach(async f=>{
                if(f.path.includes('.xlsx')){
+                   const modelName = f.path.split('.xlsx')[0]
+                   const data = []
                    const rows = await readXlsxFile(destination + f.path)
+                   rows.forEach(row=>{
+                       data .push({
+                           question :row[1],
+                           image:row[2]=='NULL'?null:row[2],
+                           a:row[3],
+                           b:row[4],
+                           c:row[5],
+                           d:row[6],
+                           answer:row[7],
+                           paper_type:row[8]
+                       })
+
+                   })
+
+                  const create= await require(`../models/${modelName}`).bulkCreate(data)
+                  if(create){
+                      fs.unlinkSync(destination + f.path)
+                  }
                }
            })
            fs.unlinkSync(file)
+           return  res.status(200).json({message:'Uploaded Successfully'})
        }
-       res.status(200).json({m:'he'})
+       return res.status(200).json({message:'Required Files are missing'})
     }
     catch(e){console.log(e)}
     
+})
+router.get('/filter_question/:id/:search/:limit', async(req,res)=>{
+    const {id, search, limit} =req.params
+    const subject = await Subject.findByPk(id);
+
+    const questions = await require(`../models/${subject.model}`).findAll({where:or(
+        {question:{[Op.like]:`%${search}%`}},
+        {a:{[Op.like]:`%${search}%`}},
+        {b:{[Op.like]:`%${search}%`}},
+        {c:{[Op.like]:`%${search}%`}},
+        {d:{[Op.like]:`%${search}%`}},
+        {answer:{[Op.like]:`%${search}%`}},
+    ),
+    limit:limit
+    })
+    return res.status(200).json({questions:questions});
+})
+router.get('/filter/:search/:limit',async(req,res)=>{
+    const {search,limit} =req.params
+    const candidates = await User.findAll({where:or(
+        {reg_no:{[Op.like]:`%${search}%`}},
+        {name:{[Op.like]:`%${search}%`}},
+        {phone:{[Op.like]:`%${search}%`}}
+    ),
+    limit:limit
+    })
+    return res.status(200).json({candidates:candidates});
+})
+router.get('/results_filter/:day/:search/:limit/:offset', async(req,res)=>{
+    const {day,search,limit,offset} = req.params
+    try{
+        num = offset * limit;
+        let details = {};
+        const results = await Activity.findAll({where:{day:day}, limit:limit, offset:num, include:[{
+            model:User,
+            where:or(
+                {reg_no:{[Op.like]:`%${search}%`}},
+                {name:{[Op.like]:`%${search}%`}}
+            )
+        },Result]});
+ 
+        results.forEach((result)=>{
+            const subject_id1 =result.user.subject1_id;
+            const subject_id2=result.user.subject2_id;
+            const subject_id3 =result.user.subject3_id;
+            const subject_id4 =result.user.subject4_id;
+            const attempted = result.results.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+
+            const c1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
+            const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
+            const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
+            const qt4 = qtotal4.length> 0? qtotal4[0].amount: 1
+            const total1 = Math.ceil(c1.length*(100/ (qt1)));
+            const total2 = Math.ceil(c2.length*(100/ (qt2)));
+            const total3 = Math.ceil(c3.length*(100/ (qt3)));
+            const total4 = Math.ceil(c4.length*(100/ (qt4)));
+            details[result.reg_no] = {
+                name:result.user.name,
+                subject1:result.user.subject1,
+                subject2:result.user.subject2,
+                subject3:result.user.subject3,
+                subject4:result.user.subject4,
+                qtotal1:qt1,
+                qtotal2:qt2,
+                qtotal3:qt3,
+                qtotal4:qt4,
+                total1:total1,
+                total2:total2,
+                total3:total3,
+                total4:total4,
+                qtotal:qt1+qt2+qt3+qt4,
+                //'qtotal'=>'180',
+                total:total1+total2+total3+total4,
+                submitted:result.submitted?'<span class="btn btn-primary btn-xs">true</span>':'<span class="btn btn-danger btn-xs">false</span>',
+                attempted:attempted.length,
+            };
+        })
+        return res.status(200).json({results:results, details:details})
+    }
+    catch(e){console.log}
+})
+router.get('/refresh', async(req,res)=>{
+    const subjects = await Subject.findAll();
+    subjects.forEach(async subject=>{
+        const questions = await require(`../models/${subject.model}`).findAll();
+        questions.forEach(question=>{
+            const paper_type = '012'.shuffle().substr(2,1);
+            question.paper_type =paper_type;
+            question.save();
+        })
+    })
+    return res.status(200).json({message:'Questions Refreshed'});
 })
 module.exports = router
