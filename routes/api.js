@@ -19,6 +19,7 @@ const Result = require('../models/result')
 const Setting = require('../models/setting')
 const Subject = require('../models/subject')
 const Upload = require('../models/upload')
+
 Activity.hasMany(Result, {foreignKey:'reg_no', sourceKey:'reg_no'})
 Result.belongsTo(Activity, {foreignKey:'reg_no', targetKey:'reg_no'})
 Activity.belongsTo(User, {foreignKey:'reg_no', targetKey:'reg_no'})
@@ -107,14 +108,15 @@ router.post('/login', async(req,res)=>{
             if(login){
                 const activity = await Activity.findOne({where:{reg_no:reg_no, day:today}, order:[['createdAt', 'DESC']]})
                 // if($setting->type != 0){
+                    
                     if(activity){
                         if((activity.submitted == 1 || activity.time_left == 0) && activity.day == today){
                            return res.status(200).json({message:'Sorry, you have already taken this Exam', status:401});
                         }
-                        else if((activity.submitted == 0 || activity.time_left == 120) && activity.day == today){
+                        else if((activity.submitted == 0 || activity.time_left == 7200) && activity.day == today){
                             //$type = $activity->paper_type >= 2? 0 : ($activity->paper_type)+1;
                             //$activity->paper_type = $type;
-                            activity.time_left = 120;
+                            //activity.time_left = 7200;
                             activity.submitted = 0;
                             if(setting.type != 0)
                             activity.mode = 1;
@@ -129,7 +131,7 @@ router.post('/login', async(req,res)=>{
                 //         if(activity.submitted == 1 || activity.time_left == 0){
                 //             // $type = $activity->paper_type >= 9? 0 : ($activity->paper_type)+1;
                 //             // $activity->paper_type = $type;
-                //             activity.time_left = 120;
+                //             activity.time_left = 7200;
                 //             activity.submitted = 0;
                 //             activity.mode = 0;
                 //             activity.save();
@@ -150,7 +152,6 @@ router.post('/login', async(req,res)=>{
 })
 
 router.get('/token', authMiddleware, (req, res)=>{
-    console.log(req.user)
     res.status(200).json({
         id:req.user.id,
         reg_no:req.user.reg_no,
@@ -175,9 +176,9 @@ router.get('/activity/:id', async(req,res)=>{
             if(!activity){
                 activity = await Activity.create({
                     reg_no:user.reg_no,
-                    time_left:120,
+                    time_left:7200,
                     day:today,
-                    paper_type: 1 //substr(str_shuffle('012'), 1,1),
+                    paper_type: 0//substr(str_shuffle('012'), 1,1),
                 });
             }
             else if(activity.time_left <= 0){
@@ -200,6 +201,7 @@ router.get('/setting', async(req,res)=>{
 })
 router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(req,res)=>{
     const {reg_no, subject1,subject2,subject3,subject4} = req.params
+    
     try{
         const activity = await Activity.findOne({where:{reg_no:reg_no, day:today}})
         const subj1 = await Subject.findOne({where:{name:subject1}})
@@ -350,6 +352,33 @@ router.patch('/end_exam', async(req, res)=>{
  * BACKEND
  * ##############################################################
  */
+ router.post('/save_admin', async(req,res)=>{
+    const {name,email,phone,password} = req.body
+    try{
+        let filename = null;
+        filename = await uploadImage(req,'admins')
+        const pwd = await bcrypt.hash(password, bcrypt.genSaltSync(8));
+        let admin = await Admin.findOne({where:{name:name,email:email}})
+        if(!admin){
+            admin = await Admin.create({
+                name:name,
+                phone:phone,
+                email:email,
+                image:filename,
+                password:pwd
+            });
+            if(admin){
+                return res.status(200).json({message:'successful'});
+            }
+        }
+        if(admin){
+            return res.status(200).json({message:'User Already Exists'});
+        }else{
+            return res.status(200).json({message:'Operation was not successful'});
+        }
+    }
+    catch(e){console.log}
+})
  router.post('/admin_login', async(req,res)=>{
     const {email,password} = req.body;
     try{
@@ -604,11 +633,11 @@ router.post('/save_subject', async(req,res)=>{
     const model = name.charAt(0).toUpperCase()+name.substr(1)
     const content = modelGenerator(model)
     const tableContent = tableGenerator()
-    let subject = await Subject.findOne({where:{name:name}});
+    let subject = await Subject.findOne({where:{name:model}});
     const filename = name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')
     if(!subject){
        subject = await Subject.create({
-            name:name,
+            name:model,
             model:filename
        });
         if(subject)
@@ -616,7 +645,7 @@ router.post('/save_subject', async(req,res)=>{
                 try{
                     await fs.writeFileSync(__dirname+`/../models/${filename}.js`,content)
                     queryInterface.createTable(filename,tableContent)
-                    return res.status(200).json({message:`subject ${name} was created successfully`});
+                    return res.status(200).json({message:`subject ${model} was created successfully`});
                 }
                 catch(e){
                     console.log(e)
@@ -624,9 +653,9 @@ router.post('/save_subject', async(req,res)=>{
 
             }
         else
-            return res.status(200).json({message:`subject ${name} failed to create`});
+            return res.status(200).json({message:`subject ${model} failed to create`});
     }else
-        return res.status(200).json({message:`subject ${name} already exists`});
+        return res.status(200).json({message:`subject ${model} already exists`});
 })
 router.get('/manage_results/:limit/:offset', async(req,res)=>{
     const {limit,offset} = req.params
@@ -645,7 +674,7 @@ router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
         const count = await Activity.findAll({where:{day:day}});
         const submitted = await Activity.findAll({where:{submitted:1, day:day}});
         const results = await Activity.findAll({where:{day:day}, limit:limit, offset:num, include:[User,Result]});
- 
+        
         results.forEach((result)=>{
             const subject_id1 =result.user.subject1_id;
             const subject_id2=result.user.subject2_id;
@@ -700,6 +729,12 @@ router.get('/update_setting/:mode', async(req,res)=>{
     const {mode} = req.params
     try{
         const setting = await Setting.findByPk(1);
+        if(!setting){
+            await Setting.create({
+                type:mode
+            })
+            return res.status(200).json({message:'sucessful'});
+        }
         setting.type= mode;
         if(setting.save()){
             return res.status(200).json({message:'sucessful'});
@@ -734,7 +769,7 @@ router.get('/relogin/:reg_no', async(req,res)=>{
         const type = user.paper_type >= 2? 0 : (user.paper_type)+1;
         user.submitted = 0;
         user.paper_type = type;
-        user.time_left = 120;
+        user.time_left = 7200;
         if(user.save())
             return res.status(200).json({message:'successful'});
         else
@@ -833,7 +868,7 @@ router.post('/import_questions', async(req,res)=>{
                    rows.forEach(row=>{
                        data .push({
                            question :row[1],
-                           image:row[2]=='NULL'?null:row[2],
+                           image:row[2]=='NULL'?null:'public/uploads/questions/'+row[2],
                            a:row[3],
                            b:row[4],
                            c:row[5],

@@ -1,8 +1,8 @@
 const {Model, DataTypes} = require('sequelize')
     const db = require('../db/config')
     
-    class CRS extends Model{}
-    CRS.init({
+    class Commerce extends Model{}
+    Commerce.init({
         question:{
             type:DataTypes.TEXT,
             allowNull:false
@@ -38,7 +38,7 @@ const {Model, DataTypes} = require('sequelize')
     },
     {
         sequelize: db,
-        modelName:'crs',
-        tableName:'crs'
+        modelName:'commerce',
+        tableName:'commerce'
     })
-    module.exports = CRS
+    module.exports = Commerce

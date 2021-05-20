@@ -1,8 +1,8 @@
 const {Model, DataTypes} = require('sequelize')
     const db = require('../db/config')
     
-    class Mak extends Model{}
-    Mak.init({
+    class Agriculturalscience extends Model{}
+    Agriculturalscience.init({
         question:{
             type:DataTypes.TEXT,
             allowNull:false
@@ -38,7 +38,7 @@ const {Model, DataTypes} = require('sequelize')
     },
     {
         sequelize: db,
-        modelName:'mak',
-        tableName:'mak'
+        modelName:'agricultural_science',
+        tableName:'agricultural_science'
     })
-    module.exports = Mak
+    module.exports = Agriculturalscience

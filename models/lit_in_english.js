@@ -1,8 +1,8 @@
 const {Model, DataTypes} = require('sequelize')
     const db = require('../db/config')
     
-    class Phone extends Model{}
-    Phone.init({
+    class LitinEnglish extends Model{}
+    LitinEnglish.init({
         question:{
             type:DataTypes.TEXT,
             allowNull:false
@@ -38,7 +38,7 @@ const {Model, DataTypes} = require('sequelize')
     },
     {
         sequelize: db,
-        modelName:'phone',
-        tableName:'phone'
+        modelName:'lit_in_english',
+        tableName:'lit_in_english'
     })
-    module.exports = Phone
+    module.exports = LitinEnglish

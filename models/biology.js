@@ -1,8 +1,8 @@
 const {Model, DataTypes} = require('sequelize')
     const db = require('../db/config')
     
-    class HomeEconomics extends Model{}
-    HomeEconomics.init({
+    class Biology extends Model{}
+    Biology.init({
         question:{
             type:DataTypes.TEXT,
             allowNull:false
@@ -38,7 +38,7 @@ const {Model, DataTypes} = require('sequelize')
     },
     {
         sequelize: db,
-        modelName:'home_economics',
-        tableName:'home_economics'
+        modelName:'biology',
+        tableName:'biology'
     })
-    module.exports = HomeEconomics
+    module.exports = Biology
