@@ -1,7 +1,7 @@
-const getApiAndEmit = socket => {
+const getApiAndEmit = (socket,io) => {
     const response = new Date();
     // Emitting a new message. Will be consumed by the client
-    socket.emit("time", response);
+    io.to(socket.id).emit("time", response);
   };
 // const setTimer = socket=>{
 //     socket.on('timeLeft', async (data)=>{
@@ -22,7 +22,7 @@ module.exports = (io)=>{
             clearInterval(interval);
           }
           interval = setInterval(() =>{
-            getApiAndEmit(socket)
+            getApiAndEmit(socket,io)
             // setTimer(socket)
           }, 1000);
           socket.on('disconnect', ()=>{

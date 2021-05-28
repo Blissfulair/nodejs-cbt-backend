@@ -1,48 +1,36 @@
-const {Model, DataTypes} = require('sequelize')
-const db = require('../db/config')
-class Activity extends Model{
-}
-Activity.init({
+const mongoose = require('mongoose')
+const Schema = mongoose.Schema;
+
+const schema = new Schema({
     reg_no:{
-        type:DataTypes.STRING,
-        allowNull:false
+        type:String
     },
     time_left:{
-        type:DataTypes.DOUBLE,
-        allowNull:false,
+        type:Number,
     },
     paper_type:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
+        type:Number,
     },
     day:{
-        type:DataTypes.STRING,
-        allowNull:false,
+        type:String,
     },
     mode:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
-        defaultValue:0
+        type:Number,
+        default:0
     },
     submitted:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
-        defaultValue:0
+        type:Number,
+        default:0
     },
-},
-
-{
-    sequelize: db,
-    modelName:'activities',
-    // instanceMethods: {
-    //     generateHash(password) {
-    //         return bcrypt.hash(password, bcrypt.genSaltSync(8));
-    //     },
-    //     validPassword(password) {
-    //         return bcrypt.compare(password, this.password);
-    //     }
-    // }
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
 
 
-module.exports = Activity
+module.exports = mongoose.model('activity', schema)

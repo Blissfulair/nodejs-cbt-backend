@@ -1,44 +1,39 @@
-const {Model, DataTypes} = require('sequelize')
-    const db = require('../db/config')
+const mongoose = require('mongoose')
+    const Schema = mongoose.Schema;
     
-    class Physics extends Model{}
-    Physics.init({
+ 
+    const schema = new Schema({
         question:{
-            type:DataTypes.TEXT,
-            allowNull:false
+            type:String,
         },
         image:{
-            type:DataTypes.STRING,
-            allowNull:true,
+            type:String
         },
         a:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         b:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         c:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         d:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         answer:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         paper_type:{
-            type:DataTypes.INTEGER,
-            allowNull:false,
+            type:Number,
         },
-    },
-    {
-        sequelize: db,
-        modelName:'physics',
-        tableName:'physics'
+        createdAt:{
+            type:Date,
+            default:Date.now()
+        },
+        updatedAt:{
+            type:Date,
+            default:Date.now()
+        }
     })
-    module.exports = Physics
+    module.exports = mongoose.model('physics', schema)

@@ -1,15 +1,16 @@
-const {Model, DataTypes} = require('sequelize')
-const db = require('../db/config')
-
-class Cbt extends Model{}
-Cbt.init({
+const mongoose = require('mongoose')
+const Schema = mongoose.Schema;
+const schema = new Schema({
     name:{
-        type:DataTypes.STRING,
-        allowNull:false,
+        type:String
     },
-},
-{
-    sequelize: db,
-    modelName:'cbts',
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
-module.exports = Cbt
+module.exports = mongoose.model('cbt', schema)

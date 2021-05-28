@@ -1,19 +1,19 @@
-const {Model, DataTypes} = require('sequelize')
-const db = require('../db/config')
-
-class Subject extends Model{}
-Subject.init({
+const mongoose = require('mongoose')
+const Schema = mongoose.Schema;
+const schema  = new Schema({
     name:{
-        type:DataTypes.STRING,
-        allowNull:false
+        type:String
     },
     model:{
-        type:DataTypes.STRING,
-        allowNull:false,
+        type:String,
     },
-},
-{
-    sequelize: db,
-    modelName:'subjects',
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
-module.exports = Subject
+module.exports = mongoose.model('subject', schema)

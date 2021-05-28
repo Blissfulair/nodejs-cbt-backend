@@ -36,4 +36,4 @@ const mongoose = require('mongoose')
             default:Date.now()
         }
     })
-    module.exports = mongoose.model('economics', schema)
+    module.exports = mongoose.model('christian_rel_knowl', schema)

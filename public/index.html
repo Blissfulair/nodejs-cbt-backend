@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exam</title>
+</head>
+<body>
+    <h2>Welcome to the official site of exams</h2>
+    <form id="form">
+        <input type="text" placeholder="Name" name="name" id="name">
+        <input type="text" placeholder="Email" name="email" id="email">
+        <input type="text" placeholder="phone" name="phone" id="phone">
+        <input type="text" placeholder="Password" name="password" id="password">
+        <button>Create Account</button>
+    </form>
+    <script>
+        const form = document.querySelector('#form')
+        form.addEventListener('submit', async(e)=>{
+            e.preventDefault()
+            const name = document.querySelector('#name').value;
+            const email = document.querySelector('#email').value;
+            const phone = document.querySelector('#phone').value;
+            const password = document.querySelector('#password').value;
+            console.log({
+                        name:name,
+                        email:email,
+                        phone:phone,
+                        password:password,
+                        image:null
+                            })
+            const response = await fetch('/api/save_admin', {method:'POST', 
+                    body:JSON.stringify({
+                        name:name,
+                        email:email,
+                        phone:phone,
+                        password:password,
+                        image:null
+                            }),
+                    headers:{"Content-Type":"application/json"}
+                })
+            const res = await response.json()
+            console.log(res)
+        })
+    </script>
+</body>
+</html>

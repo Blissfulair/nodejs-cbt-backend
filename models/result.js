@@ -1,44 +1,39 @@
-const {Model, DataTypes} = require('sequelize')
-const db = require('../db/config')
-
-class Result extends Model{}
-Result.init({
+const mongoose = require('mongoose')
+const Schema = mongoose.Schema;
+schema = new Schema({
     reg_no:{
-        type:DataTypes.STRING,
-        allowNull:false
+        type:String
     },
     day:{
-        type:DataTypes.INTEGER,
-        allowNull:true,
+        type:Number,
     },
     question_id:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
+        type:String,
     },
     amount:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
+        type:Number,
     },
     options:{
-        type:DataTypes.STRING,
-        allowNull:false,
+        type:String,
     },
     subject_id:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
+        type:String,
     },
     answer:{
-        type:DataTypes.INTEGER,
-        defaultValue:0
+        type:Number,
+        default:0
     },
     paper_type:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
+        type:Number,
     },
-},
-{
-    sequelize: db,
-    modelName:'result',
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
 
-module.exports = Result
+module.exports = mongoose.model('result', schema)

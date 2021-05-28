@@ -1,8 +1,9 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
-const {Op,or} = require('sequelize')
-const db = require('../db/config')
-const queryInterface = db.getQueryInterface()
+// const {Op,or} = require('sequelize')
+// const mongoose = require('mongoose')
+// const db = require('../db/config')
+// const queryInterface = db.getQueryInterface()
 const jwt = require('jsonwebtoken')
 const fs = require('fs')
 const pa = require('path')
@@ -19,10 +20,7 @@ const Result = require('../models/result')
 const Setting = require('../models/setting')
 const Subject = require('../models/subject')
 const Upload = require('../models/upload')
-
-Activity.hasMany(Result, {foreignKey:'reg_no', sourceKey:'reg_no'})
-Result.belongsTo(Activity, {foreignKey:'reg_no', targetKey:'reg_no'})
-Activity.belongsTo(User, {foreignKey:'reg_no', targetKey:'reg_no'})
+const nodemailer = require('nodemailer');
 
 const Excel = require('excel4node')
 const wb = new Excel.Workbook()
@@ -44,13 +42,13 @@ const uploadFile =async(req, path)=>{
     try{
         if(req.files){
             const file = req.files.file;
-            const uploaded = await Upload.findOne({where:{file:`${file.md5}.zip`}})
+            const uploaded = await Upload.findOne({file:`${file.md5}.zip`})
             if(!uploaded){
                 await file.mv(pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`), (e)=>{
                     if(e)
                     return null
                 })
-                await Upload.create({file:`${file.md5}.zip`})
+               const create = await Upload.create({file:`${file.md5}.zip`})
                 return pa.join(__dirname, `/../public/uploads/${path}/${file.md5}.zip`)
             }
             else{
@@ -88,9 +86,9 @@ const uploadImage =async(req, path)=>{
  */
 router.get('/get_center', async(req,res)=>{
     try{
-        const cbt = await Cbt.findByPk(1);
-        if(cbt)
-            res.status(200).json({center:cbt.name})
+        const cbt = await Cbt.find();
+        if(cbt.length>0)
+            res.status(200).json({center:cbt[0].name})
         else
             res.status(200).json({center:''})
     }
@@ -101,27 +99,28 @@ router.get('/get_center', async(req,res)=>{
 router.post('/login', async(req,res)=>{
     const {reg_no} = req.body;
     try{
-        const user = await User.findOne({where:{reg_no:reg_no}})
-        const setting = await Setting.findByPk(1);
+        const user = await User.findOne({reg_no:reg_no})
+        const setting = await Setting.find();
         if(user){
            const login =  await bcrypt.compare(reg_no, user.password)
             if(login){
-                const activity = await Activity.findOne({where:{reg_no:reg_no, day:today}, order:[['createdAt', 'DESC']]})
+                const activity = await Activity.findOne({reg_no:reg_no, day:today}, null, {sort:{createdAt:-1}})
                 // if($setting->type != 0){
-                    
                     if(activity){
                         if((activity.submitted == 1 || activity.time_left == 0) && activity.day == today){
                            return res.status(200).json({message:'Sorry, you have already taken this Exam', status:401});
                         }
-                        else if((activity.submitted == 0 || activity.time_left == 7200) && activity.day == today){
+                        else if((activity.submitted == 0 || activity.time_left == 120*60) && activity.day == today){
                             //$type = $activity->paper_type >= 2? 0 : ($activity->paper_type)+1;
                             //$activity->paper_type = $type;
-                            //activity.time_left = 7200;
+                            //activity.time_left = 120*60;
                             activity.submitted = 0;
-                            if(setting.type != 0)
-                            activity.mode = 1;
-                            else
-                            activity.mode = 0;
+                            if(setting.length>0){
+                                if(setting[0].type != 0)
+                                activity.mode = 1;
+                                else
+                                activity.mode = 0;
+                            }
                             activity.save(); 
                         }
                     }
@@ -131,7 +130,7 @@ router.post('/login', async(req,res)=>{
                 //         if(activity.submitted == 1 || activity.time_left == 0){
                 //             // $type = $activity->paper_type >= 9? 0 : ($activity->paper_type)+1;
                 //             // $activity->paper_type = $type;
-                //             activity.time_left = 7200;
+                //             activity.time_left = 120;
                 //             activity.submitted = 0;
                 //             activity.mode = 0;
                 //             activity.save();
@@ -139,7 +138,7 @@ router.post('/login', async(req,res)=>{
                 //      }
                 //  }
                 if(user){
-                    return res.status(200).json({user:user, status:200, token:jwt.sign({userId:user.id}, 'cbt')});
+                    return res.status(200).json({user:user, status:200, token:jwt.sign({userId:user._id}, 'cbt')});
                 }else{
                     return res.status(200).json({user:user, message:'not logged in', status:200});
                 }
@@ -153,7 +152,7 @@ router.post('/login', async(req,res)=>{
 
 router.get('/token', authMiddleware, (req, res)=>{
     res.status(200).json({
-        id:req.user.id,
+        id:req.user._id,
         reg_no:req.user.reg_no,
         subject1:req.user.subject1,
         subject2:req.user.subject2,
@@ -171,12 +170,12 @@ router.get('/token', authMiddleware, (req, res)=>{
 router.get('/activity/:id', async(req,res)=>{
     const {id} = req.params
     try{
-        const user = await User.findByPk(id);
-        let activity = await Activity.findOne({where:{reg_no:user.reg_no, day:today},order:[['createdAt','DESC']]})   
+        const user = await User.findById(id);
+        let activity = await Activity.findOne({reg_no:user.reg_no, day:today},null, {sort:{createdAt:-1}})   
             if(!activity){
                 activity = await Activity.create({
                     reg_no:user.reg_no,
-                    time_left:7200,
+                    time_left:120*60,
                     day:today,
                     paper_type: 0//substr(str_shuffle('012'), 1,1),
                 });
@@ -190,7 +189,21 @@ router.get('/activity/:id', async(req,res)=>{
 })
 router.get('/setting', async(req,res)=>{
     try{
-        const setting =  await Setting.findByPk(1);
+        let setting =  await Setting.find();
+        if(setting.length<1)
+        setting = '';
+        else
+        setting = setting[0]
+        return res.status(200).json({setting:setting});
+    }
+    catch(e){
+        console.log(e)
+    }
+})
+router.post('/setting', async(req,res)=>{
+    const {type} = req.body
+    try{
+        let setting =  await Setting.create({type:type});
         if(!setting)
         setting = '';
         return res.status(200).json({setting:setting});
@@ -201,18 +214,16 @@ router.get('/setting', async(req,res)=>{
 })
 router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(req,res)=>{
     const {reg_no, subject1,subject2,subject3,subject4} = req.params
-    
     try{
-        const activity = await Activity.findOne({where:{reg_no:reg_no, day:today}})
-        const subj1 = await Subject.findOne({where:{name:subject1}})
-        const s1 = await require(`../models/${subj1.model}`).findAll({where:{paper_type:activity.paper_type}, order:[['createdAt', 'DESC']], limit:60})
-        const subj2 = await Subject.findOne({where:{name:subject2}})
-        const s2 = await require(`../models/${subj2.model}`).findAll({where:{paper_type:activity.paper_type}, order:[['createdAt', 'DESC']], limit:40})
-        const subj3 = await Subject.findOne({where:{name:subject3}})
-        const s3 = await require(`../models/${subj3.model}`).findAll({where:{paper_type:activity.paper_type}, order:[['createdAt', 'DESC']], limit:40})
-        const subj4 = await Subject.findOne({where:{name:subject4}})
-        const s4 = await require(`../models/${subj4.model}`).findAll({where:{paper_type:activity.paper_type}, order:[['createdAt', 'DESC']], limit:40})
-    
+        const activity = await Activity.findOne({reg_no:reg_no, day:today})
+        const subj1 = await Subject.findOne({name:{ $regex: '.*'+subject1+'.*', $options:'i'}})
+        const s1 = await require(`../models/${subj1.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(60)// order:[['createdAt', 'DESC']], limit:60})
+        const subj2 = await Subject.findOne({name:{ $regex: '.*'+subject2+'.*', $options:'i'}})
+        const s2 = await require(`../models/${subj2.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
+        const subj3 = await Subject.findOne({name:{ $regex: '.*'+subject3+'.*', $options:'i'}})
+        const s3 = await require(`../models/${subj3.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
+        const subj4 = await Subject.findOne({name:{ $regex: '.*'+subject4+'.*', $options:'i'}})
+        const s4 = await require(`../models/${subj4.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
         return res.status(200).json({
                                 subject1:s1, 
                                 subject1_id:subj1.id, 
@@ -230,30 +241,30 @@ router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(r
 })
 router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
     const {reg_no,s1,s2,s3,s4,paper_type} = req.params
-    const subject1 = await Result.findAll({where:{
+    const subject1 = await Result.find({
         reg_no:reg_no,
         paper_type:paper_type,
         day:today,
         subject_id:s1
-    }})
-    const subject2 = await Result.findAll({where:{
+    })
+    const subject2 = await Result.find({
         reg_no:reg_no,
         paper_type:paper_type,
         day:today,
         subject_id:s2
-    }})
-    const subject3 = await Result.findAll({where:{
+    })
+    const subject3 = await Result.find({
         reg_no:reg_no,
         paper_type:paper_type,
         day:today,
         subject_id:s3
-    }})
-    const subject4 = await Result.findAll({where:{
+    })
+    const subject4 = await Result.find({
         reg_no:reg_no,
         paper_type:paper_type,
         day:today,
         subject_id:s4
-    }})
+    })
     return res.status(200).json({results:{
         subject1:subject1,
         subject2:subject2,
@@ -264,7 +275,7 @@ router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
 router.patch('/time', async(req,res)=>{
     const {reg_no,time} = req.body
     try{
-        const activity = await Activity.findOne({where:{reg_no:reg_no,day:today},order:[['createdAt', 'DESC']]});
+        const activity = await Activity.findOne({reg_no:reg_no,day:today},null, {sort:{createdAt:-1}})//order:[['createdAt', 'DESC']]});
         activity.time_left = time;
         if( activity.save()){
             return res.status(200).json({time:activity.time_left});
@@ -289,13 +300,13 @@ router.post('/save_answers', async(req,res)=>{
                      else{
                         ans = quest['answer'];
                     }
-                    let answer = await Result.findOne({where:{
+                    let answer = await Result.findOne({
                         question_id:quest['question_id'],
                         reg_no:quest['reg_no'],
                         day:today,
                         paper_type:quest['paper_type'],
                         subject_id:quest['subject_id']
-                    }})
+                    })
                  if(!answer){
                      answer= await Result.create({
                          reg_no:quest['reg_no'],
@@ -332,7 +343,7 @@ router.post('/save_answers', async(req,res)=>{
 router.patch('/end_exam', async(req, res)=>{
     const {reg_no} =req.body
     try{
-        const activity = await Activity.findOne({where:{reg_no:reg_no,day:today}});
+        const activity = await Activity.findOne({reg_no:reg_no,day:today});
         if(activity){
             if(activity.time_left > 0){
             activity.time_left = 0;
@@ -347,32 +358,36 @@ router.patch('/end_exam', async(req, res)=>{
         console.log(e)
     }
 })
-/**
- * ##############################################################
- * BACKEND
- * ##############################################################
- */
+// /**
+//  * ##############################################################
+//  * BACKEND
+//  * ##############################################################
+//  */
  router.post('/save_admin', async(req,res)=>{
     const {name,email,phone,password} = req.body
+    console.log(name, email,phone,password)
+
     try{
+        //$file = $request->file('file');
         let filename = null;
         filename = await uploadImage(req,'admins')
         const pwd = await bcrypt.hash(password, bcrypt.genSaltSync(8));
-        let admin = await Admin.findOne({where:{name:name,email:email}})
+        let admin = await Admin.findOne({where:{email:email}})
         if(!admin){
             admin = await Admin.create({
                 name:name,
                 phone:phone,
                 email:email,
                 image:filename,
-                password:pwd
+                password:pwd,
+
             });
             if(admin){
                 return res.status(200).json({message:'successful'});
             }
         }
         if(admin){
-            return res.status(200).json({message:'User Already Exists'});
+            return res.status(200).json({message:'Admin Already Exists'});
         }else{
             return res.status(200).json({message:'Operation was not successful'});
         }
@@ -382,7 +397,7 @@ router.patch('/end_exam', async(req, res)=>{
  router.post('/admin_login', async(req,res)=>{
     const {email,password} = req.body;
     try{
-        const admin = await Admin.findOne({where:{email:email}})
+        const admin = await Admin.findOne({email:email})
         if(admin){
            const login =  await bcrypt.compare(password, admin.password)
             if(login){
@@ -409,12 +424,11 @@ router.get('/token2', authMiddleware2, (req, res)=>{
 
 router.get('/subjects', async(req,res)=>{
     try{
-        const subjects = await Subject.findAll();
+        const subjects = await Subject.find();
         const end = 'ABCDEFGHIABCEDFIHHIECDAIEFCAEF'.shuffle().substr(5,2);
         let reg_no = 'GL'+reg;
-        const cand = await User.findAll({where:{reg_no:{
-            [Op.like]:reg_no+'%'
-        }}});
+        const cand = await User.find({reg_no:{$regex:'.*'+reg_no+'.*'}});
+        
         if(cand.length< 10)
             reg_no += '00'+cand.length+end;
         else if(cand.length >= 10 && cand.length < 100)
@@ -435,7 +449,7 @@ router.post('/save_candidate', async(req,res)=>{
         filename = await uploadImage(req,'candidates')
         //$file = $request->file('file');
         const password = await bcrypt.hash(reg_no, bcrypt.genSaltSync(8));
-        let candidate = await User.findOne({where:{name:name,email:email}})
+        let candidate = await User.findOne({name:name,email:email})
         if(!candidate){
             candidate = await User.create({
                 name:name,
@@ -453,9 +467,46 @@ router.post('/save_candidate', async(req,res)=>{
                 image:filename,
                 password:password
             });
-            if(candidate){
-                return res.status(200).json({message:'successful'});
-            }
+            // if(candidate){
+            //     const transporter = nodemailer.createTransport({
+            //         host: 'cbtservices.com.ng',
+            //         secureConnection: true,
+            //         port:465,
+            //         auth: {
+            //           user: 'exams@cbtservices.com.ng',
+            //           pass: 'givitec2020?!...'
+            //         }
+            //       });
+                  
+            //       const mailOptions = {
+            //         from: 'exams@cbtservices.com.ng',
+            //         to: email,
+            //         subject: 'Invitation for Aptitude Test',
+            //         html: `<div>
+            //                 <strong>Hello ${name},</strong><br>
+            //                 This is to info you that you have been scheduled for a computer based test (CBT).<br>
+            //                 You are hereby advised to visit <a href="https://www.exam.cbtservices.com.ng">https://www.exam.cbtservices.com.ng</a> within the next 24hours.
+            //                 <br>
+            //                 <strong><u>Login Details</u></strong><br><br>
+            //                 ${reg_no}
+            //                 <br>
+            //                 <strong>NOTE:</strong>:Make use the latest version of FireFox browser and computer for proper rendering.
+            //                 <br>
+            //                 Good Luck!
+            //                 <br><br>
+            //                 <p>For more enquiry send email to <a href="mailto:exams@cbtservices.com.ng">exams@cbtservices.com.ng</a></p>
+            //             </div>`
+            //       };
+                  
+            //       transporter.sendMail(mailOptions, function(error, info){
+            //         if (error) {
+            //           console.log(error);
+            //         } else {
+            //           console.log('Email sent: ' + info.response);
+            //         }
+            //       });
+            //     return res.status(200).json({message:'successful'});
+            // }
         }
         if(candidate){
             return res.status(200).json({message:'User Already Exists'});
@@ -470,7 +521,7 @@ router.get('/candidates/:limit/:offset', async(req,res)=>{
     const {offset,limit} = req.params
     try{
         const num = offset * limit;
-        const candidates = await User.findAll({order:[['createdAt', 'DESC']],limit:limit,offset:num})
+        const candidates = await User.find({},null,{sort:{createdAt:-1}})
         return res.status(200).json({candidates:candidates});
     }
     catch(e){console.log}
@@ -478,7 +529,7 @@ router.get('/candidates/:limit/:offset', async(req,res)=>{
 router.get('/candidate/:id', async(req,res)=>{
     const {id}=req.params
     try{
-        const candidate = await User.findByPk(id);
+        const candidate = await User.findById(id);
         return res.status(200).json({candidate:candidate});
     }
     catch(e){console.log}
@@ -492,7 +543,7 @@ router.post('/candidate_update', async(req,res)=>{
         let filename = null;
         filename = await uploadImage(req,'candidates')
 
-        const candidate = await User.findByPk(user_id);
+        const candidate = await User.findById(user_id);
         if(name != '')
         candidate.name= name;
         if(email != '')
@@ -512,6 +563,7 @@ router.post('/candidate_update', async(req,res)=>{
         // candidate.subject2= $request->subject2;
         // candidate.subject3= $request->subject3;
         // candidate.subject4= $request->subject4;
+        
         if(candidate.save()){
             return res.status(200).json({message:'successful'});
         }else{
@@ -524,8 +576,8 @@ router.post('/candidate_update', async(req,res)=>{
 router.get('/destroy_candidate/:id', async(req,res)=>{
     const {id} =req.params
     try{
-        const candidate = await User.findByPk(id);
-        if(candidate.destroy())
+        const candidate = await User.findByIdAndDelete(id);
+        if(candidate)
             return res.status(200).json({message:'successful'});
         else
             return res.status(200).json({message:'Delete Operation Failed'});
@@ -539,8 +591,8 @@ router.post('/save_question', async(req,res)=>{
        let filename = null;
        filename = await uploadImage(req,'questions')
 
-          const subject = await Subject.findByPk(req.body.subject);
-          const check_exist = await require(`../models/${subject.model}`).findOne({where:{question:question}});
+          const subject = await Subject.findById(req.body.subject);
+          const check_exist = await require(`../models/${subject.model}`).findOne({question:question});
           if(!check_exist){
               if(subject){
                   const quest= await require(`../models/${subject.model}`).create({
@@ -550,7 +602,7 @@ router.post('/save_question', async(req,res)=>{
                        c:c,
                        d:d,
                        answer:answer.toLowerCase(),
-                       paper_type: '012'.shuffle().substr(0,1),
+                       paper_type: 1,//'012'.shuffle().substr(0,1),
                        image:filename
                   });
                    if(quest)
@@ -568,8 +620,8 @@ router.post('/update_question', async(req,res)=>{
         let filename = null;
         filename =  await uploadImage(req,'questions')
 
-            const subject = await Subject.findByPk(req.body.subject);
-            const quest = await require(`../models/${subject.model}`).findByPk(question_id);
+            const subject = await Subject.findById(req.body.subject);
+            const quest = await require(`../models/${subject.model}`).findById(question_id);
             if(quest){
                 if(quest != '')
                 quest.question=question;
@@ -600,8 +652,8 @@ router.get('/manage_question/:id/:limit/:offset', async(req,res)=>{
     const {id,limit,offset} = req.params
     try{
         const num = offset * limit;
-            const subject = await Subject.findByPk(id);
-            const questions = await require(`../models/${subject.model}`).findAll({order:[['createdAt', 'DESC']], limit:limit, offset:num});
+            const subject = await Subject.findById(id);
+            const questions = await require(`../models/${subject.model}`).aggregate([{$sort:{createdAt:-1}}, {$limit:Number(limit)+num}, {$skip:num}])//({order:[['createdAt', 'DESC']], limit:limit, offset:num});
             return res.status(200).json({message:'updated', subject:subject.name, questions:questions});
     }
     catch(e){console.log}
@@ -609,8 +661,8 @@ router.get('/manage_question/:id/:limit/:offset', async(req,res)=>{
 router.get('/get_question/:subject_id/:question_id', async(req,res)=>{
     const {subject_id,question_id} = req.params
     try{
-        const subject = await Subject.findByPk(subject_id);
-        const question = await require(`../models/${subject.model}`).findByPk(question_id);
+        const subject = await Subject.findById(subject_id);
+        const question = await require(`../models/${subject.model}`).findById(question_id);
         return res.status(200).json({question:question});
     }
     catch(e){console.log}
@@ -618,9 +670,9 @@ router.get('/get_question/:subject_id/:question_id', async(req,res)=>{
 router.get('/destroy_question/:subject_id/:question_id', async(req,res)=>{
     const {subject_id,question_id} = req.params
     try{
-        const subject = await Subject.findByPk(subject_id);
-        const question = await require(`../models/${subject.model}`).findByPk(question_id);
-        if(question.destroy())
+        const subject = await Subject.findById(subject_id);
+        const question = await require(`../models/${subject.model}`).findByIdAndDelete(question_id);
+        if(question)
         return res.status(200).json({message:'successful'});
     else
         return res.status(200).json({message:'Delete Operation Failed'});
@@ -633,7 +685,7 @@ router.post('/save_subject', async(req,res)=>{
     const model = name.charAt(0).toUpperCase()+name.substr(1)
     const content = modelGenerator(model)
     const tableContent = tableGenerator()
-    let subject = await Subject.findOne({where:{name:model}});
+    let subject = await Subject.findOne({name:model});
     const filename = name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')
     if(!subject){
        subject = await Subject.create({
@@ -644,7 +696,6 @@ router.post('/save_subject', async(req,res)=>{
             {
                 try{
                     await fs.writeFileSync(__dirname+`/../models/${filename}.js`,content)
-                    queryInterface.createTable(filename,tableContent)
                     return res.status(200).json({message:`subject ${model} was created successfully`});
                 }
                 catch(e){
@@ -653,15 +704,26 @@ router.post('/save_subject', async(req,res)=>{
 
             }
         else
-            return res.status(200).json({message:`subject ${model} failed to create`});
+            return res.status(200).json({message:`subject ${name} failed to create`});
     }else
-        return res.status(200).json({message:`subject ${model} already exists`});
+        return res.status(200).json({message:`subject ${name} already exists`});
+})
+router.get('/destroy_subject/:subjectId', async(req,res)=>{
+    const {subjectId} =req.params
+    let subject = await Subject.findById(subjectId)
+    const deleted= await require(`../models/${subject.model}`).deleteMany()
+    if(deleted){
+        await Subject.findByIdAndDelete(subjectId)
+        fs.unlinkSync(__dirname+`/../models/${subject.model}.js`)
+    }
+    res.status(200).json({message:'Deleted'})
 })
 router.get('/manage_results/:limit/:offset', async(req,res)=>{
     const {limit,offset} = req.params
     try{
         const num = offset * limit;
-        const results = await Activity.findAll({attributes:['day'],order:[['createdAt', 'DESC']],group:['day'], limit:limit, offset:num})
+        const results = await Activity.aggregate([{$project:{day:1}}, {$group:{_id:{day:"$day"}}}, {$sort:{createdAt:-1}}, {$limit:Number(limit)+num}, {$skip:num}])//attributes:['day'],order:[['createdAt', 'DESC']],group:['day'], limit:limit, offset:num})
+
         return res.status(200).json({results:results});
     }
     catch(e){console.log}
@@ -669,17 +731,33 @@ router.get('/manage_results/:limit/:offset', async(req,res)=>{
 router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
     const {day,limit,offset} = req.params
     try{
-        num = offset * limit;
+       const num = offset * limit;
         let details = {};
-        const count = await Activity.findAll({where:{day:day}});
-        const submitted = await Activity.findAll({where:{submitted:1, day:day}});
-        const results = await Activity.findAll({where:{day:day}, limit:limit, offset:num, include:[User,Result]});
-        
+        const count = await Activity.find({day:day});
+        const submitted = await Activity.find({submitted:1, day:day});
+        const results = await Activity.aggregate([{$match:{day:day}}, {$limit:Number(limit)+num}, {$skip:num}, 
+            {
+                $lookup:{
+                from:"users",
+                localField:"reg_no",
+                foreignField:"reg_no",
+                as:"user"
+                }
+            },
+            {
+                $lookup:{
+                from:"results",
+                localField:"reg_no",
+                foreignField:"reg_no",
+                as:"results"
+                }
+            }
+    ]);
         results.forEach((result)=>{
-            const subject_id1 =result.user.subject1_id;
-            const subject_id2=result.user.subject2_id;
-            const subject_id3 =result.user.subject3_id;
-            const subject_id4 =result.user.subject4_id;
+            const subject_id1 =result.user[0].subject1_id;
+            const subject_id2=result.user[0].subject2_id;
+            const subject_id3 =result.user[0].subject3_id;
+            const subject_id4 =result.user[0].subject4_id;
             const attempted = result.results.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
             const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
             const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
@@ -699,11 +777,11 @@ router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
             const total3 = Math.ceil(c3.length*(100/ (qt3)));
             const total4 = Math.ceil(c4.length*(100/ (qt4)));
             details[result.reg_no] = {
-                name:result.user.name,
-                subject1:result.user.subject1,
-                subject2:result.user.subject2,
-                subject3:result.user.subject3,
-                subject4:result.user.subject4,
+                name:result.user[0].name,
+                subject1:result.user[0].subject1,
+                subject2:result.user[0].subject2,
+                subject3:result.user[0].subject3,
+                subject4:result.user[0].subject4,
                 qtotal1:qt1,
                 qtotal2:qt2,
                 qtotal3:qt3,
@@ -723,53 +801,56 @@ router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
         details['submitted']=submitted.length;
         return res.status(200).json({results:results, details:details})
     }
-    catch(e){console.log}
+    catch(e){console.log(e)}
 })
 router.get('/update_setting/:mode', async(req,res)=>{
     const {mode} = req.params
     try{
-        const setting = await Setting.findByPk(1);
-        if(!setting){
-            await Setting.create({
-                type:mode
-            })
+        const setting = await Setting.find();
+        if(setting.length<1){
+            await Setting.create({type:mode})
             return res.status(200).json({message:'sucessful'});
         }
-        setting.type= mode;
-        if(setting.save()){
+        else{
+            setting[0].type= mode;
+            if(setting[0].save())
             return res.status(200).json({message:'sucessful'});
-        }else{
+            else
             return res.status(200).json({message:'failed'});
         }
+            
+
     }
     catch(e){console.log}
 })
 router.post('/center', async(req,res)=>{
     const {name} = req.body
     try{
-        let center = await Cbt.findByPk(1);
-        if(!center){
+        let center = await Cbt.find();
+        
+        if(center.length<1){
             center = await Cbt.create({
-                            name:name
+                            name:name,
             });
             if(center)
                 return res.status(200).json({message:'Created Successfully'});
         }else{
-            center.name = name;
-            if(center.save())
+            center[0].name = name;
+            if(center[0].save())
                 return res.status(200).json({message:'Updated Successfully'});
         }
     }
-    catch(e){console.log}
+    catch(e){console.log(e)}
 })
 router.get('/relogin/:reg_no', async(req,res)=>{
     const {reg_no} = req.params
-    const user = await Activity.findOne({where:{reg_no:reg_no, day:today}, order:[['createdAt', 'DESC']]});
+    const user = await Activity.findOne({reg_no:reg_no, day:today},null, {sort:{createdAt:-1}});
+
     if(user){
         const type = user.paper_type >= 2? 0 : (user.paper_type)+1;
         user.submitted = 0;
         user.paper_type = type;
-        user.time_left = 7200;
+        user.time_left = 120 *60;
         if(user.save())
             return res.status(200).json({message:'successful'});
         else
@@ -779,45 +860,65 @@ router.get('/relogin/:reg_no', async(req,res)=>{
 })
 router.get('/export_candidate/:start/:end', async(req, res)=>{
     const{start,end}=req.params
-    const candidate = await User.findAll({where:{createdAt:{[Op.gte]:start}, createdAt:{[Op.lte]:end}}});
-    return res.status(200).json({candidate:candidate});
+    try{
+        const candidate = await User.aggregate([{$match:{createdAt:{$gte:new Date(start), $lte:new Date(end)}}}]);
+        return res.status(200).json({candidate:candidate});
+    }
+    catch(e){console.log(e)}
 })
 router.get('/candidate_export/:start/:end', async(req, res)=>{
     const{start,end}=req.params
-    const center = await Cbt.findByPk(1);
-    const candidates = await User.findAll({where:{createdAt:{[Op.gte]:start}, createdAt:{[Op.lte]:end}}});
-    ws.cell(1,1,1,8, true).string(`LIST OF REGISTERED CANDIDATES FROM ${start} TO ${end}`).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:14},alignment:{horizontal:['center']}})
-    ws.cell(2,1).string('S/N').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,2,2,3, true).string('NAMES').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,4).string('REG NO').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,5,2,8, true).string('SUBJECTS').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    const center = await Cbt.find();
+    const candidates = await User.aggregate([{$match:{createdAt:{$gte:new Date(start), $lte:new Date(end)}}}]);
+    ws.cell(1,1,1,8, true).string(`LIST OF REGISTERED CANDIDATES FROM ${start} TO ${end}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
+    ws.cell(2,1).string('S/N').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,2,2,3, true).string('NAMES').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,4).string('REG NO').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,5,2,8, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     candidates.forEach((candidate, i)=>{
-        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
-        ws.cell(i+3,2,i+3,3, true).string(candidate.name).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,4).string(candidate.reg_no).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
-        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,6).string(candidate.subject2).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,7).string(candidate.subject3).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,8).string(candidate.subject4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
+        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
+        ws.cell(i+3,2,i+3,3, true).string(candidate.name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,4).string(candidate.reg_no).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
+        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,6).string(candidate.subject2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,7).string(candidate.subject3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,8).string(candidate.subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
     })
-    return wb.write(`${center.name.toLowerCase()} candidate list for ${start} to ${end}.xlsx`, res)
+    return wb.write(`${center.length>0?center[0].name.toLowerCase():''} candidate list for ${start} to ${end}.xlsx`, res)
 })
 
 router.get('/export/:day', async(req, res)=>{
     const{day}=req.params
-    const center = await Cbt.findByPk(1);
-    const results = await Activity.findAll({where:{day:day}, include:[User,Result]});
-    ws.cell(1,1,1,13, true).string(`${center.name} RESULT FOR ${day}`).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:14},alignment:{horizontal:['center']}})
-    ws.cell(2,1).string('S/N').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,2,2,3, true).string('NAME').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,4).string('REG NO').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,5,2,12, true).string('SUBJECTS').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
-    ws.cell(2,13).string('TOTAL').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:10},alignment:{horizontal:['center']}})
+    const center = await Cbt.find();
+    const results = await Activity.aggregate([{$match:{day:day}}, 
+        {
+            $lookup:{
+            from:"users",
+            localField:"reg_no",
+            foreignField:"reg_no",
+            as:"user"
+            }
+        },
+        {
+            $lookup:{
+            from:"results",
+            localField:"reg_no",
+            foreignField:"reg_no",
+            as:"results"
+            }
+        }
+]);
+    ws.cell(1,1,1,13, true).string(`${center.length>0?center[0].name.toUpperCase():''} RESULT FOR ${day}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
+    ws.cell(2,1).string('S/N').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,2,2,3, true).string('NAME').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,4).string('REG NO').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,5,2,12, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,13).string('TOTAL').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     results.forEach((result,i)=>{
-        const subject_id1 =result.user.subject1_id;
-        const subject_id2=result.user.subject2_id;
-        const subject_id3 =result.user.subject3_id;
-        const subject_id4 =result.user.subject4_id;
+        const subject_id1 =result.user[0].subject1_id;
+        const subject_id2=result.user[0].subject2_id;
+        const subject_id3 =result.user[0].subject3_id;
+        const subject_id4 =result.user[0].subject4_id;
         const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
         const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
         const qtotal3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
@@ -835,21 +936,21 @@ router.get('/export/:day', async(req, res)=>{
         const total2 = Math.ceil(c2.length*(100/ (qt2)));
         const total3 = Math.ceil(c3.length*(100/ (qt3)));
         const total4 = Math.ceil(c4.length*(100/ (qt4)));
-        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
-        ws.cell(i+3,2,i+3,3, true).string(result.user.name).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,4).string(result.reg_no).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9},alignment:{horizontal:['center']}})
-        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,6).number(total1).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,7).string(result.user.subject2).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,8).number(total2).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,9).string(result.user.subject3).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,10).number(total3).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,11).string(result.user.subject4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,12).number(total4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:9}})
-        ws.cell(i+3,13).number(total1+total2+total3+total4).style({border:{bottom:{style:['thin'],color:'black'},top:{style:['thin'],color:'black'},right:{style:['thin'],color:'black'},left:{style:['thin'],color:'black'}},font:{size:12, bold:true},alignment:{horizontal:['center']}})
+        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
+        ws.cell(i+3,2,i+3,3, true).string(result.user[0].name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,4).string(result.reg_no).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
+        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,6).number(total1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,7).string(result.user[0].subject2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,8).number(total2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,9).string(result.user[0].subject3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,10).number(total3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,11).string(result.user[0].subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,12).number(total4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,13).number(total1+total2+total3+total4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:12, bold:true},alignment:{horizontal:'center'}})
     })
-
-    return wb.write(`${center.name.toLowerCase()} result for ${day}.xlsx`, res)
+    console.log(center)
+    return wb.write(`${center.length>0?center[0].name.toLowerCase():''} result for ${day}.xlsx`, res)
 })
 router.post('/import_questions', async(req,res)=>{
     const path = 'db'
@@ -879,7 +980,7 @@ router.post('/import_questions', async(req,res)=>{
 
                    })
 
-                  const create= await require(`../models/${modelName}`).bulkCreate(data)
+                  const create= await require(`../models/${modelName}`).insertMany(data)
                   if(create){
                       fs.unlinkSync(destination + f.path)
                   }
@@ -895,49 +996,81 @@ router.post('/import_questions', async(req,res)=>{
 })
 router.get('/filter_question/:id/:search/:limit', async(req,res)=>{
     const {id, search, limit} =req.params
-    const subject = await Subject.findByPk(id);
+    const subject = await Subject.findById(id);
 
-    const questions = await require(`../models/${subject.model}`).findAll({where:or(
-        {question:{[Op.like]:`%${search}%`}},
-        {a:{[Op.like]:`%${search}%`}},
-        {b:{[Op.like]:`%${search}%`}},
-        {c:{[Op.like]:`%${search}%`}},
-        {d:{[Op.like]:`%${search}%`}},
-        {answer:{[Op.like]:`%${search}%`}},
-    ),
-    limit:limit
-    })
+    const questions = await require(`../models/${subject.model}`).aggregate([{$match:{$or:[
+        {question:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {a:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {b:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {c:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {d:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {answer:{ $regex: '.*'+search+'.*', $options:'i'}},
+    ]}},
+    {
+        $limit:Number(limit)
+    }])
     return res.status(200).json({questions:questions});
 })
 router.get('/filter/:search/:limit',async(req,res)=>{
     const {search,limit} =req.params
-    const candidates = await User.findAll({where:or(
-        {reg_no:{[Op.like]:`%${search}%`}},
-        {name:{[Op.like]:`%${search}%`}},
-        {phone:{[Op.like]:`%${search}%`}}
-    ),
-    limit:limit
-    })
+    const candidates = await User.aggregate([{$match:{$or:[
+        {reg_no:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {name:{ $regex: '.*'+search+'.*', $options:'i'}},
+        {phone:{ $regex: '.*'+search+'.*', $options:'i'}}
+    ]}},
+    {
+        $limit:Number(limit)
+    }
+    ])
     return res.status(200).json({candidates:candidates});
 })
 router.get('/results_filter/:day/:search/:limit/:offset', async(req,res)=>{
     const {day,search,limit,offset} = req.params
     try{
-        num = offset * limit;
+        const num = offset * limit;
         let details = {};
-        const results = await Activity.findAll({where:{day:day}, limit:limit, offset:num, include:[{
-            model:User,
-            where:or(
-                {reg_no:{[Op.like]:`%${search}%`}},
-                {name:{[Op.like]:`%${search}%`}}
-            )
-        },Result]});
+        const results = await Activity.aggregate([
+        {$match:{day:day}},
+        {
+            $limit:Number(limit)+num
+        },
+        {
+            $skip:num
+        },
+        {
+            $lookup:{
+                from:"users",
+                localField:"reg_no",
+                foreignField:"reg_no",
+                as:"user"
+                }
+        },
+        {
+            $lookup:{
+                from:"results",
+                localField:"reg_no",
+                foreignField:"reg_no",
+                as:"results",
+                }
+        },
+        {
+            $match:{
+                $or:[
+                    {"user.reg_no":{ $regex: '.*'+search+'.*', $options:'i'}},
+                    {"user.name":{ $regex: '.*'+search+'.*', $options:'i'}},
+                    {"user.subject1":{ $regex: '.*'+search+'.*', $options:'i'}},
+                    {"user.subject2":{ $regex: '.*'+search+'.*', $options:'i'}} 
+                ]
+            }
+        }
+    
+    ]);
  
         results.forEach((result)=>{
-            const subject_id1 =result.user.subject1_id;
-            const subject_id2=result.user.subject2_id;
-            const subject_id3 =result.user.subject3_id;
-            const subject_id4 =result.user.subject4_id;
+            const subject_id1 =result.user[0].subject1_id;
+            const subject_id2=result.user[0].subject2_id;
+            const subject_id3 =result.user[0].subject3_id;
+            const subject_id4 =result.user[0].subject4_id;
             const attempted = result.results.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
             const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
             const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
@@ -957,11 +1090,11 @@ router.get('/results_filter/:day/:search/:limit/:offset', async(req,res)=>{
             const total3 = Math.ceil(c3.length*(100/ (qt3)));
             const total4 = Math.ceil(c4.length*(100/ (qt4)));
             details[result.reg_no] = {
-                name:result.user.name,
-                subject1:result.user.subject1,
-                subject2:result.user.subject2,
-                subject3:result.user.subject3,
-                subject4:result.user.subject4,
+                name:result.user[0].name,
+                subject1:result.user[0].subject1,
+                subject2:result.user[0].subject2,
+                subject3:result.user[0].subject3,
+                subject4:result.user[0].subject4,
                 qtotal1:qt1,
                 qtotal2:qt2,
                 qtotal3:qt3,
@@ -982,9 +1115,9 @@ router.get('/results_filter/:day/:search/:limit/:offset', async(req,res)=>{
     catch(e){console.log}
 })
 router.get('/refresh', async(req,res)=>{
-    const subjects = await Subject.findAll();
+    const subjects = await Subject.find();
     subjects.forEach(async subject=>{
-        const questions = await require(`../models/${subject.model}`).findAll();
+        const questions = await require(`../models/${subject.model}`).find();
         questions.forEach(question=>{
             const paper_type = '012'.shuffle().substr(2,1);
             question.paper_type =paper_type;

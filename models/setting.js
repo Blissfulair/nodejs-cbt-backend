@@ -1,24 +1,17 @@
-const {Model, DataTypes} = require('sequelize')
-const db = require('../db/config')
-
-class Setting extends Model{}
-Setting.init({
+const mongoose = require('mongoose')
+const Schema = mongoose.Schema;
+const schema = new Schema({
     type:{
-        type:DataTypes.INTEGER,
-        allowNull:false,
-        defaultValue:0
+        type:String,
+        default:0
     },
-},
-{
-    sequelize: db,
-    modelName:'settings',
-    // instanceMethods: {
-    //     generateHash(password) {
-    //         return bcrypt.hash(password, bcrypt.genSaltSync(8));
-    //     },
-    //     validPassword(password) {
-    //         return bcrypt.compare(password, this.password);
-    //     }
-    // }
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
-module.exports = Setting
+module.exports = mongoose.model('setting', schema)

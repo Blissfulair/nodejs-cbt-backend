@@ -36,4 +36,4 @@ const mongoose = require('mongoose')
             default:Date.now()
         }
     })
-    module.exports = mongoose.model('economics', schema)
+    module.exports = mongoose.model('use_of_english', schema)

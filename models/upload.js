@@ -1,17 +1,17 @@
-const {Model, DataTypes} = require('sequelize')
-const db = require('../db/config')
+const mongoose = require('mongoose')
+const Schema = mongoose.Schema;
 
-class Upload extends Model{}
-Upload.init({
+const schema = new Schema({
     file:{
-        type:DataTypes.STRING,
-        allowNull:false,
-        defaultValue:0
+        type:String,
     },
-},
-{
-    sequelize: db,
-    modelName:'uploads',
-    tableName:'uploads'
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
-module.exports = Upload
+module.exports = mongoose.model('upload', schema)

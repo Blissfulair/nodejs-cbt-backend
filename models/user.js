@@ -1,82 +1,59 @@
-const {Model, DataTypes, Sequelize} = require('sequelize')
+const mongoose =require('mongoose')
+const Schema = mongoose.Schema;
 
-const db = require('../db/config')
-const Activity = require('./activity')
-
-class User extends Model{}
-User.init({
+const schema = new Schema({
     name:{
-        type:DataTypes.STRING,
-        allowNull:false
+        type:String,
     },
     phone:{
-        type:DataTypes.STRING,
-        allowNull:true,
+        type:String,
     },
     email:{
-        type:DataTypes.STRING,
-        allowNull:false,
+        type:String,
         unique:true
     },
     reg_no:{
-        type:DataTypes.STRING,
-        allowNull:false,
+        type:String,
         unique:true
     },
     subject1:{
-        type:DataTypes.STRING,
-        allowNull:true
+        type:String,
     },
     subject1_id:{
-        type:DataTypes.SMALLINT,
-        allowNull:true
+        type:String,
     },
     subject2:{
-        type:DataTypes.STRING,
-        allowNull:true
+        type:String,
     },
     subject2_id:{
-        type:DataTypes.SMALLINT,
-        allowNull:true
+        type:String,
     },
     subject3:{
-        type:DataTypes.STRING,
-        allowNull:true
+        type:String,
     },
     subject3_id:{
-        type:DataTypes.SMALLINT,
-        allowNull:true
+        type:String,
     },
     subject4:{
-        type:DataTypes.STRING,
-        allowNull:true
+        type:String,
     },
     subject4_id:{
-        type:DataTypes.SMALLINT,
-        allowNull:true
+        type:String,
     },
     image:{
-        type:DataTypes.STRING,
-        allowNull:true
+        type:String,
     },
     password:{
-        type:DataTypes.STRING,
-        allowNull:false
+        type:String,
     },
-},
-{
-    sequelize: db,
-    modelName:'users',
-    // instanceMethods: {
-    //     generateHash(password) {
-    //         return bcrypt.hash(password, bcrypt.genSaltSync(8));
-    //     },
-    //     validPassword(password) {
-    //         return bcrypt.compare(password, this.password);
-    //     }
-    // }
+    createdAt:{
+        type:Date,
+        default:Date.now()
+    },
+    updatedAt:{
+        type:Date,
+        default:Date.now()
+    }
 })
-User.associate =()=>{
-    User.hasMany(Activity, {targetKey:'reg_no',foreignKey:'reg_no'})
-}
-module.exports = User
+schema.on('init', (model)=>{})
+module.exports = mongoose.model('user', schema)

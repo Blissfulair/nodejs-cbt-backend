@@ -11,7 +11,7 @@ module.exports = (req, res, next)=>{
         if(err)
         return res.status(401).json({error:'You must be logged in to accsess this resource'})
         const {adminId} = payload
-        const admin = await Admin.findByPk(adminId)
+        const admin = await Admin.findById(adminId)
         req.admin = admin
         next()
     })

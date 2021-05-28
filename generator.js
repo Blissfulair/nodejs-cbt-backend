@@ -1,46 +1,41 @@
 module.exports = (name)=>{
-    return`const {Model, DataTypes} = require('sequelize')
-    const db = require('../db/config')
+    return`const mongoose = require('mongoose')
+    const Schema = mongoose.Schema;
     
-    class ${name.replace(/\s/g, '').replace(/[.]/g, '_').replace(/[-]/g,'')} extends Model{}
-    ${name.replace(/\s/g, '').replace(/[.]/g, '_').replace(/[-]/g,'')}.init({
+ 
+    const schema = new Schema({
         question:{
-            type:DataTypes.TEXT,
-            allowNull:false
+            type:String,
         },
         image:{
-            type:DataTypes.STRING,
-            allowNull:true,
+            type:String
         },
         a:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         b:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         c:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         d:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         answer:{
-            type:DataTypes.STRING,
-            allowNull:false,
+            type:String,
         },
         paper_type:{
-            type:DataTypes.INTEGER,
-            allowNull:false,
+            type:Number,
         },
-    },
-    {
-        sequelize: db,
-        modelName:'${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}',
-        tableName:'${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}'
+        createdAt:{
+            type:Date,
+            default:Date.now()
+        },
+        updatedAt:{
+            type:Date,
+            default:Date.now()
+        }
     })
-    module.exports = ${name.replace(/\s/g, '').replace(/[.]/g, '_').replace(/[-]/g,'')}`
+    module.exports = mongoose.model('${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}', schema)`
 }
