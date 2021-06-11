@@ -1,4 +1,6 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
+const { async } = require('rxjs');
+const db = require('../db/config')
 const Schema = mongoose.Schema;
 
 const schema = new Schema({
@@ -32,5 +34,8 @@ const schema = new Schema({
     }
 })
 
-
-module.exports = mongoose.model('activity', schema)
+// module.exports = async()=>{
+//     console.log('here')
+//     await db.user.model('activity', schema)
+// }
+module.exports = db.user.model('activity', schema)

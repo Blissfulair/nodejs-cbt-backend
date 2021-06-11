@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
     const Schema = mongoose.Schema;
+    const db = require('../db/config')
     
  
     const schema = new Schema({
@@ -36,4 +37,4 @@ const mongoose = require('mongoose')
             default:Date.now()
         }
     })
-    module.exports = mongoose.model('physics', schema)
+    module.exports = db.questions.model('physics', schema)

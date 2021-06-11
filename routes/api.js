@@ -1,9 +1,5 @@
 const express = require('express')
 const bcrypt = require('bcryptjs')
-// const {Op,or} = require('sequelize')
-// const mongoose = require('mongoose')
-// const db = require('../db/config')
-// const queryInterface = db.getQueryInterface()
 const jwt = require('jsonwebtoken')
 const fs = require('fs')
 const pa = require('path')
@@ -22,6 +18,7 @@ const Subject = require('../models/subject')
 const Upload = require('../models/upload')
 const nodemailer = require('nodemailer');
 
+
 const Excel = require('excel4node')
 const wb = new Excel.Workbook()
 const ws = wb.addWorksheet('Sheet 1')
@@ -38,6 +35,7 @@ const router = express.Router()
  * FUNCTIONS
  * #######################################################
  */
+
 const uploadFile =async(req, path)=>{
     try{
         if(req.files){
@@ -99,8 +97,12 @@ router.get('/get_center', async(req,res)=>{
 router.post('/login', async(req,res)=>{
     const {reg_no} = req.body;
     try{
-        const user = await User.findOne({reg_no:reg_no})
-        const setting = await Setting.find();
+        // const user = await User.findOne({reg_no:reg_no})
+        // const setting = await Setting.find();
+        const [user, setting] = await Promise.all([
+            User.findOne({reg_no:reg_no}),
+            Setting.find()
+        ])
         if(user){
            const login =  await bcrypt.compare(reg_no, user.password)
             if(login){
@@ -171,7 +173,8 @@ router.get('/activity/:id', async(req,res)=>{
     const {id} = req.params
     try{
         const user = await User.findById(id);
-        let activity = await Activity.findOne({reg_no:user.reg_no, day:today},null, {sort:{createdAt:-1}})   
+        if(user){
+            let activity = await Activity.findOne({reg_no:user.reg_no, day:today},null, {sort:{createdAt:-1}})   
             if(!activity){
                 activity = await Activity.create({
                     reg_no:user.reg_no,
@@ -184,6 +187,7 @@ router.get('/activity/:id', async(req,res)=>{
                 return res.status(200).json({activity:activity, message:'Exam has ended'});
             }
         return res.status(200).json({activity:activity, message:'success'});
+        }
     }
     catch(e){console.log(e)}
 })
@@ -216,14 +220,19 @@ router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(r
     const {reg_no, subject1,subject2,subject3,subject4} = req.params
     try{
         const activity = await Activity.findOne({reg_no:reg_no, day:today})
-        const subj1 = await Subject.findOne({name:{ $regex: '.*'+subject1+'.*', $options:'i'}})
-        const s1 = await require(`../models/${subj1.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(60)// order:[['createdAt', 'DESC']], limit:60})
-        const subj2 = await Subject.findOne({name:{ $regex: '.*'+subject2+'.*', $options:'i'}})
-        const s2 = await require(`../models/${subj2.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
-        const subj3 = await Subject.findOne({name:{ $regex: '.*'+subject3+'.*', $options:'i'}})
-        const s3 = await require(`../models/${subj3.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
-        const subj4 = await Subject.findOne({name:{ $regex: '.*'+subject4+'.*', $options:'i'}})
-        const s4 = await require(`../models/${subj4.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
+        if(activity){
+        const [subj1, subj2,subj3,subj4] = await Promise.all([
+            Subject.findOne({name:{ $regex: '.*'+subject1+'.*', $options:'i'}}),
+            Subject.findOne({name:{ $regex: '.*'+subject2+'.*', $options:'i'}}),
+            Subject.findOne({name:{ $regex: '.*'+subject3+'.*', $options:'i'}}),
+            Subject.findOne({name:{ $regex: '.*'+subject4+'.*', $options:'i'}})
+        ])
+        const [s1,s2,s3,s4] = await Promise.all([
+            require(`../models/${subj1.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(60),
+            require(`../models/${subj2.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40),
+            require(`../models/${subj3.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40),
+            require(`../models/${subj4.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
+        ])
         return res.status(200).json({
                                 subject1:s1, 
                                 subject1_id:subj1.id, 
@@ -234,6 +243,7 @@ router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(r
                                 subject4:s4, 
                                 subject4_id:subj4.id
                             });
+        }
     }
     catch(e){
         console.log(e)
@@ -241,45 +251,79 @@ router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(r
 })
 router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
     const {reg_no,s1,s2,s3,s4,paper_type} = req.params
-    const subject1 = await Result.find({
-        reg_no:reg_no,
-        paper_type:paper_type,
-        day:today,
-        subject_id:s1
-    })
-    const subject2 = await Result.find({
-        reg_no:reg_no,
-        paper_type:paper_type,
-        day:today,
-        subject_id:s2
-    })
-    const subject3 = await Result.find({
-        reg_no:reg_no,
-        paper_type:paper_type,
-        day:today,
-        subject_id:s3
-    })
-    const subject4 = await Result.find({
-        reg_no:reg_no,
-        paper_type:paper_type,
-        day:today,
-        subject_id:s4
-    })
-    return res.status(200).json({results:{
-        subject1:subject1,
-        subject2:subject2,
-        subject3:subject3,
-        subject4:subject4,
-    }, total:subject1.length+subject2.length+subject3.length+subject4.length});
+    try{
+        const [subject1, subject2, subject3, subject4] = await Promise.all([
+            Result.find({
+                reg_no:reg_no,
+                paper_type:paper_type,
+                day:today,
+                subject_id:s1
+            }),
+            Result.find({
+                reg_no:reg_no,
+                paper_type:paper_type,
+                day:today,
+                subject_id:s2
+            }),
+            Result.find({
+                reg_no:reg_no,
+                paper_type:paper_type,
+                day:today,
+                subject_id:s3
+            }),
+            Result.find({
+                reg_no:reg_no,
+                paper_type:paper_type,
+                day:today,
+                subject_id:s4
+            })
+        ])
+        // const subject1 = await Result.find({
+        //     reg_no:reg_no,
+        //     paper_type:paper_type,
+        //     day:today,
+        //     subject_id:s1
+        // })
+        // console.log(subject1, 'one')
+        // const subject2 = await Result.find({
+        //     reg_no:reg_no,
+        //     paper_type:paper_type,
+        //     day:today,
+        //     subject_id:s2
+        // })
+        // const subject3 = await Result.find({
+        //     reg_no:reg_no,
+        //     paper_type:paper_type,
+        //     day:today,
+        //     subject_id:s3
+        // })
+        // const subject4 = await Result.find({
+        //     reg_no:reg_no,
+        //     paper_type:paper_type,
+        //     day:today,
+        //     subject_id:s4
+        // })
+        return res.status(200).json({results:{
+            subject1:subject1,
+            subject2:subject2,
+            subject3:subject3,
+            subject4:subject4,
+        }, total:subject1.length+subject2.length+subject3.length+subject4.length});
+    }
+    catch(e){
+        console.log(e)
+    }
 })
 router.patch('/time', async(req,res)=>{
     const {reg_no,time} = req.body
     try{
         const activity = await Activity.findOne({reg_no:reg_no,day:today},null, {sort:{createdAt:-1}})//order:[['createdAt', 'DESC']]});
+        if(activity){
         activity.time_left = time;
         if( activity.save()){
             return res.status(200).json({time:activity.time_left});
         }
+    }
     }
     catch(e){console.log(e)}
 })
@@ -365,7 +409,6 @@ router.patch('/end_exam', async(req, res)=>{
 //  */
  router.post('/save_admin', async(req,res)=>{
     const {name,email,phone,password} = req.body
-    console.log(name, email,phone,password)
 
     try{
         //$file = $request->file('file');
@@ -383,6 +426,7 @@ router.patch('/end_exam', async(req, res)=>{
 
             });
             if(admin){
+                console.log(admin)
                 return res.status(200).json({message:'successful'});
             }
         }
@@ -442,6 +486,7 @@ router.get('/subjects', async(req,res)=>{
 
 router.post('/save_candidate', async(req,res)=>{
     const {name,email,phone,reg_no} = req.body
+    console.log(name,email)
     try{
         const subjects = JSON.parse(req.body.subjects);
         const subjectsID = JSON.parse(req.body.subjectsID)
@@ -450,6 +495,7 @@ router.post('/save_candidate', async(req,res)=>{
         //$file = $request->file('file');
         const password = await bcrypt.hash(reg_no, bcrypt.genSaltSync(8));
         let candidate = await User.findOne({name:name,email:email})
+        
         if(!candidate){
             candidate = await User.create({
                 name:name,
@@ -505,16 +551,16 @@ router.post('/save_candidate', async(req,res)=>{
             //           console.log('Email sent: ' + info.response);
             //         }
             //       });
-            //     return res.status(200).json({message:'successful'});
+           return res.status(200).json({message:'successful'});
             // }
         }
-        if(candidate){
+        else{
             return res.status(200).json({message:'User Already Exists'});
-        }else{
-            return res.status(200).json({message:'Operation was not successful'});
         }
     }
-    catch(e){console.log}
+    catch(e){
+        return res.status(200).json({message:'Another user exists with this email address'});
+    }
 })
 
 router.get('/candidates/:limit/:offset', async(req,res)=>{
@@ -590,7 +636,6 @@ router.post('/save_question', async(req,res)=>{
         const {question,a,b,c,d,answer} = req.body
        let filename = null;
        filename = await uploadImage(req,'questions')
-
           const subject = await Subject.findById(req.body.subject);
           const check_exist = await require(`../models/${subject.model}`).findOne({question:question});
           if(!check_exist){
@@ -733,9 +778,12 @@ router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
     try{
        const num = offset * limit;
         let details = {};
-        const count = await Activity.find({day:day});
-        const submitted = await Activity.find({submitted:1, day:day});
-        const results = await Activity.aggregate([{$match:{day:day}}, {$limit:Number(limit)+num}, {$skip:num}, 
+
+        const check = await Result.find({day:day});
+        const [count, submitted, results]= await Promise.all([
+            Activity.find({day:day}),
+            Activity.find({submitted:1, day:day}),
+            Activity.aggregate([{$match:{day:day}}, {$limit:Number(limit)+num}, {$skip:num}, 
             {
                 $lookup:{
                 from:"users",
@@ -743,31 +791,25 @@ router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
                 foreignField:"reg_no",
                 as:"user"
                 }
-            },
-            {
-                $lookup:{
-                from:"results",
-                localField:"reg_no",
-                foreignField:"reg_no",
-                as:"results"
-                }
             }
-    ]);
+            ])
+        ])
+ 
         results.forEach((result)=>{
             const subject_id1 =result.user[0].subject1_id;
             const subject_id2=result.user[0].subject2_id;
             const subject_id3 =result.user[0].subject3_id;
             const subject_id4 =result.user[0].subject4_id;
-            const attempted = result.results.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const attempted = check.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+            const qtotal4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
 
-            const c1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const c2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const c3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const c4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+            const c4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
             const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
             const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
             const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
@@ -889,8 +931,10 @@ router.get('/candidate_export/:start/:end', async(req, res)=>{
 
 router.get('/export/:day', async(req, res)=>{
     const{day}=req.params
-    const center = await Cbt.find();
-    const results = await Activity.aggregate([{$match:{day:day}}, 
+    const check = await Result.find({day:day});
+    const [center, results]= await Promise.all([
+        Cbt.find(),
+        Activity.aggregate([{$match:{day:day}},
         {
             $lookup:{
             from:"users",
@@ -898,16 +942,9 @@ router.get('/export/:day', async(req, res)=>{
             foreignField:"reg_no",
             as:"user"
             }
-        },
-        {
-            $lookup:{
-            from:"results",
-            localField:"reg_no",
-            foreignField:"reg_no",
-            as:"results"
-            }
         }
-]);
+        ])
+    ])
     ws.cell(1,1,1,13, true).string(`${center.length>0?center[0].name.toUpperCase():''} RESULT FOR ${day}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
     ws.cell(2,1).string('S/N').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     ws.cell(2,2,2,3, true).string('NAME').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
@@ -919,15 +956,15 @@ router.get('/export/:day', async(req, res)=>{
         const subject_id2=result.user[0].subject2_id;
         const subject_id3 =result.user[0].subject3_id;
         const subject_id4 =result.user[0].subject4_id;
-        const qtotal1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-        const qtotal2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-        const qtotal3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-        const qtotal4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
+        const qtotal4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
 
-        const c1 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const c2 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const c3 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const c4 = result.results.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
+        const c4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
         const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
         const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
         const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
@@ -949,7 +986,6 @@ router.get('/export/:day', async(req, res)=>{
         ws.cell(i+3,12).number(total4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,13).number(total1+total2+total3+total4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:12, bold:true},alignment:{horizontal:'center'}})
     })
-    console.log(center)
     return wb.write(`${center.length>0?center[0].name.toLowerCase():''} result for ${day}.xlsx`, res)
 })
 router.post('/import_questions', async(req,res)=>{

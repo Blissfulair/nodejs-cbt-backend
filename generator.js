@@ -1,6 +1,7 @@
 module.exports = (name)=>{
     return`const mongoose = require('mongoose')
     const Schema = mongoose.Schema;
+    const db = require('../db/config')
     
  
     const schema = new Schema({
@@ -37,5 +38,5 @@ module.exports = (name)=>{
             default:Date.now()
         }
     })
-    module.exports = mongoose.model('${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}', schema)`
+    module.exports = db.questions.model('${name.toLowerCase().replace(/[.]/g,'').replace(/\s/g, '_').replace(/[-]/g,'_')}', schema)`
 }

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema;
+const db = require('../db/config')
 schema = new Schema({
     reg_no:{
         type:String
@@ -36,4 +37,4 @@ schema = new Schema({
     }
 })
 
-module.exports = mongoose.model('result', schema)
+module.exports = db.result.model('result', schema)

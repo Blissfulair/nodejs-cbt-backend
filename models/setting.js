@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const Schema = mongoose.Schema;
+const db = require('../db/config')
 const schema = new Schema({
     type:{
         type:String,
@@ -14,4 +15,4 @@ const schema = new Schema({
         default:Date.now()
     }
 })
-module.exports = mongoose.model('setting', schema)
+module.exports = db.admin.model('setting', schema)
