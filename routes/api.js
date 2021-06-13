@@ -16,6 +16,7 @@ const Result = require('../models/result')
 const Setting = require('../models/setting')
 const Subject = require('../models/subject')
 const Upload = require('../models/upload')
+const Basic = require('../models/basic')
 const nodemailer = require('nodemailer');
 
 
@@ -25,6 +26,7 @@ const ws = wb.addWorksheet('Sheet 1')
 
 const authMiddleware = require('../middleware/auth')
 const authMiddleware2 = require('../middleware/auth2')
+const basic = require('../models/basic')
 const date = new Date()
 const month = date.getMonth()+1
 const today = date.getFullYear()+''+(month<10?'0'+month:month)+''+(date.getDate()<10?'0'+date.getDate():date.getDate())
@@ -35,7 +37,9 @@ const router = express.Router()
  * FUNCTIONS
  * #######################################################
  */
-
+// Result.collection.drop()
+// .then(e=>console.log(e))
+// .catch(e=>console.log(e))
 const uploadFile =async(req, path)=>{
     try{
         if(req.files){
@@ -85,8 +89,9 @@ const uploadImage =async(req, path)=>{
 router.get('/get_center', async(req,res)=>{
     try{
         const cbt = await Cbt.find();
+        const basic = await Basic.findOne()
         if(cbt.length>0)
-            res.status(200).json({center:cbt[0].name})
+            res.status(200).json({center:cbt[0].name, basic:basic})
         else
             res.status(200).json({center:''})
     }
@@ -99,12 +104,16 @@ router.post('/login', async(req,res)=>{
     try{
         // const user = await User.findOne({reg_no:reg_no})
         // const setting = await Setting.find();
-        const [user, setting] = await Promise.all([
+        const [user, setting,basic] = await Promise.all([
             User.findOne({reg_no:reg_no}),
-            Setting.find()
+            Setting.find(),
+            Basic.findOne()
         ])
         if(user){
            const login =  await bcrypt.compare(reg_no, user.password)
+            if(!basic){
+                return res.status(200).json({message:'Contact Administrator for time setting', status:401});
+            }
             if(login){
                 const activity = await Activity.findOne({reg_no:reg_no, day:today}, null, {sort:{createdAt:-1}})
                 // if($setting->type != 0){
@@ -112,10 +121,10 @@ router.post('/login', async(req,res)=>{
                         if((activity.submitted == 1 || activity.time_left == 0) && activity.day == today){
                            return res.status(200).json({message:'Sorry, you have already taken this Exam', status:401});
                         }
-                        else if((activity.submitted == 0 || activity.time_left == 120*60) && activity.day == today){
+                        else if((activity.submitted == 0 || activity.time_left == basic.time*60) && activity.day == today){
                             //$type = $activity->paper_type >= 2? 0 : ($activity->paper_type)+1;
                             //$activity->paper_type = $type;
-                            //activity.time_left = 120*60;
+                            //activity.time_left = 60*60;
                             activity.submitted = 0;
                             if(setting.length>0){
                                 if(setting[0].type != 0)
@@ -132,7 +141,7 @@ router.post('/login', async(req,res)=>{
                 //         if(activity.submitted == 1 || activity.time_left == 0){
                 //             // $type = $activity->paper_type >= 9? 0 : ($activity->paper_type)+1;
                 //             // $activity->paper_type = $type;
-                //             activity.time_left = 120;
+                //             activity.time_left = 60;
                 //             activity.submitted = 0;
                 //             activity.mode = 0;
                 //             activity.save();
@@ -172,13 +181,16 @@ router.get('/token', authMiddleware, (req, res)=>{
 router.get('/activity/:id', async(req,res)=>{
     const {id} = req.params
     try{
-        const user = await User.findById(id);
+        const [user, basic] = await Promise.all([
+            User.findById(id),
+            Basic.findOne()
+        ]);
         if(user){
             let activity = await Activity.findOne({reg_no:user.reg_no, day:today},null, {sort:{createdAt:-1}})   
             if(!activity){
                 activity = await Activity.create({
                     reg_no:user.reg_no,
-                    time_left:120*60,
+                    time_left:basic.time*60,
                     day:today,
                     paper_type: 0//substr(str_shuffle('012'), 1,1),
                 });
@@ -186,7 +198,7 @@ router.get('/activity/:id', async(req,res)=>{
             else if(activity.time_left <= 0){
                 return res.status(200).json({activity:activity, message:'Exam has ended'});
             }
-        return res.status(200).json({activity:activity, message:'success'});
+        return res.status(200).json({activity:activity, message:'success', time:basic.time});
         }
     }
     catch(e){console.log(e)}
@@ -250,65 +262,27 @@ router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(r
     }
 })
 router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
-    const {reg_no,s1,s2,s3,s4,paper_type} = req.params
+    const {reg_no,paper_type} = req.params
     try{
-        const [subject1, subject2, subject3, subject4] = await Promise.all([
-            Result.find({
+        const answered = await Result.findOne({
                 reg_no:reg_no,
                 paper_type:paper_type,
-                day:today,
-                subject_id:s1
-            }),
-            Result.find({
-                reg_no:reg_no,
-                paper_type:paper_type,
-                day:today,
-                subject_id:s2
-            }),
-            Result.find({
-                reg_no:reg_no,
-                paper_type:paper_type,
-                day:today,
-                subject_id:s3
-            }),
-            Result.find({
-                reg_no:reg_no,
-                paper_type:paper_type,
-                day:today,
-                subject_id:s4
+                day:today
             })
-        ])
-        // const subject1 = await Result.find({
-        //     reg_no:reg_no,
-        //     paper_type:paper_type,
-        //     day:today,
-        //     subject_id:s1
-        // })
-        // console.log(subject1, 'one')
-        // const subject2 = await Result.find({
-        //     reg_no:reg_no,
-        //     paper_type:paper_type,
-        //     day:today,
-        //     subject_id:s2
-        // })
-        // const subject3 = await Result.find({
-        //     reg_no:reg_no,
-        //     paper_type:paper_type,
-        //     day:today,
-        //     subject_id:s3
-        // })
-        // const subject4 = await Result.find({
-        //     reg_no:reg_no,
-        //     paper_type:paper_type,
-        //     day:today,
-        //     subject_id:s4
-        // })
+        if(answered)
         return res.status(200).json({results:{
-            subject1:subject1,
-            subject2:subject2,
-            subject3:subject3,
-            subject4:subject4,
-        }, total:subject1.length+subject2.length+subject3.length+subject4.length});
+            subject1:answered.subject1,
+            subject2:answered.subject2,
+            subject3:answered.subject3,
+            subject4:answered.subject4,
+        }, total:answered.subject1.length+answered.subject2.length+answered.subject3.length+answered.subject4.length});
+        else
+        return res.status(200).json({results:{
+            subject1:[],
+            subject2:[],
+            subject3:[],
+            subject4:[],
+        }, total:0});
     }
     catch(e){
         console.log(e)
@@ -329,52 +303,121 @@ router.patch('/time', async(req,res)=>{
 })
 router.post('/save_answers', async(req,res)=>{
     try{
+
+        const {
+            name, 
+            reg_no, 
+            subject1_name, 
+            subject1, 
+            subject2_name, 
+            subject2,  
+            subject3_name, 
+            subject3,  
+            subject4_name, 
+            subject4,
+            question,
+            paper_type
+        } = req.body
+
+        let answer = await Result.findOne({
+            reg_no:reg_no,
+            day:today,
+            paper_type:paper_type,
+        })
+
+        let details = {
+            subject1:0,
+            subject2:0,
+            subject3:0,
+            subject4:0,
+            subject1_name,
+            subject2_name,
+            subject3_name,
+            subject4_name,
+        }
+        let numberAnswered = subject1.length + subject2.length + subject3.length + subject4.length
+        let questionTotal =question.s1Total+question.s2Total+question.s3Total+question.s4Total
         for(let i=1; i <= 4; i++){
+            let score=0;
             const questions = req.body['subject'+i]
             if(questions.length > 0){
-                questions.forEach(async(quest )=>{
+                questions.forEach(async(quest, j )=>{
                         let ans = 0
                     if(Object.keys(quest).length == 8){ // number of items in the quest variable
                         if(quest['option'] == quest['answer']){
                             ans = 1;
+                            score += 1
+
                         }else{
                             ans = 0;
                         }
+                        switch(i){
+                            case 1:
+                                subject1[j]['createdAt'] = new Date()
+                            break;
+                            case 2:
+                                subject2[j]['createdAt'] = new Date()
+                            break;
+                            case 3:
+                                subject3[j]['createdAt'] = new Date()
+                            break;
+                            case 4:
+                                subject4[j]['createdAt'] = new Date()
+                            break;
+                        }
+
                     }
                      else{
-                        ans = quest['answer'];
+                         ans = quest['answer']
+                         score += quest['answer']
                     }
-                    let answer = await Result.findOne({
-                        question_id:quest['question_id'],
-                        reg_no:quest['reg_no'],
-                        day:today,
-                        paper_type:quest['paper_type'],
-                        subject_id:quest['subject_id']
-                    })
-                 if(!answer){
-                     answer= await Result.create({
-                         reg_no:quest['reg_no'],
-                         paper_type:quest['paper_type'],
-                         day:today,
-                         question_id:quest['question_id'],
-                         answer:ans,
-                         options:quest['options'],
-                         subject_id:quest['subject_id'],
-                         amount:quest['amount'],
-                     });
-                 }else{
-                         answer.reg_no=quest['reg_no'];
-                         answer.paper_type=quest['paper_type'];
-                         answer.day=today;
-                         answer.question_id=quest['question_id'];
-                         answer.answer=ans;
-                         answer.options=quest['options'];
-                         answer.subject_id=quest['subject_id'];
-                         answer.save();
-                 }
+                    switch(i){
+                        case 1:
+                            details['subject1'] = Math.ceil(score*(100/question.s1Total))
+                            subject1[j]['answer'] = ans
+                        break;
+                        case 2:
+                            details['subject2'] = Math.ceil(score*(100/ question.s2Total))
+                            subject2[j]['answer'] = ans
+                        break;
+                        case 3:
+                            details['subject3'] = Math.ceil(score*(100/question.s3Total))
+                            subject3[j]['answer'] = ans
+                        break;
+                        case 4:
+                            details['subject4'] = Math.ceil(score*(100/ question.s4Total))
+                            subject4[j]['answer'] = ans
+                        break;
+                    }
                 })
             }
         }
+
+            if(!answer){
+                answer = await Result.create({
+                    name,
+                    reg_no,
+                    subject1,
+                    subject2,
+                    subject3,
+                    subject4,
+                    day:today,
+                    paper_type,
+                    details,
+                    amount:questionTotal,
+                    answered:numberAnswered
+                })
+            }
+            else{
+                answer.subject1 = subject1
+                answer.subject2 = subject2
+                answer.subject3 = subject3
+                answer.subject4 = subject4
+                answer.details = details
+                answer.amount = questionTotal
+                answer.answered = numberAnswered
+                answer.save()
+            }
     
         return res.status(200).json({
             status:200,
@@ -394,6 +437,9 @@ router.patch('/end_exam', async(req, res)=>{
             }
             activity.submitted = 1;
             if(activity.save()){
+               const result =  await Result.findOne({reg_no:reg_no})
+                result.submitted = 1
+                result.save()
                 return res.status(200).json({status:'success', message:'successfully submited', activity:activity});
             }
         }
@@ -468,9 +514,12 @@ router.get('/token2', authMiddleware2, (req, res)=>{
 
 router.get('/subjects', async(req,res)=>{
     try{
-        const subjects = await Subject.find();
+        const [subjects, basic] = await Promise.all([
+            Subject.find(),
+            Basic.findOne()
+        ]);
         const end = 'ABCDEFGHIABCEDFIHHIECDAIEFCAEF'.shuffle().substr(5,2);
-        let reg_no = 'GL'+reg;
+        let reg_no = basic.reg.toUpperCase()+reg;
         const cand = await User.find({reg_no:{$regex:'.*'+reg_no+'.*'}});
         
         if(cand.length< 10)
@@ -698,7 +747,7 @@ router.get('/manage_question/:id/:limit/:offset', async(req,res)=>{
     try{
         const num = offset * limit;
             const subject = await Subject.findById(id);
-            const questions = await require(`../models/${subject.model}`).aggregate([{$sort:{createdAt:-1}}, {$limit:Number(limit)+num}, {$skip:num}])//({order:[['createdAt', 'DESC']], limit:limit, offset:num});
+            const questions = await require(`../models/${subject.model}`).aggregate([{$sort:{createdAt:-1}}])//({order:[['createdAt', 'DESC']], limit:limit, offset:num});
             return res.status(200).json({message:'updated', subject:subject.name, questions:questions});
     }
     catch(e){console.log}
@@ -767,7 +816,7 @@ router.get('/manage_results/:limit/:offset', async(req,res)=>{
     const {limit,offset} = req.params
     try{
         const num = offset * limit;
-        const results = await Activity.aggregate([{$project:{day:1}}, {$group:{_id:{day:"$day"}}}, {$sort:{createdAt:-1}}, {$limit:Number(limit)+num}, {$skip:num}])//attributes:['day'],order:[['createdAt', 'DESC']],group:['day'], limit:limit, offset:num})
+        const results = await Activity.aggregate([{$project:{day:1}}, {$group:{_id:{day:"$day"}}}, {$sort:{createdAt:-1}}])//attributes:['day'],order:[['createdAt', 'DESC']],group:['day'], limit:limit, offset:num})
 
         return res.status(200).json({results:results});
     }
@@ -779,67 +828,11 @@ router.get('/view_results/:day/:limit/:offset',async(req,res)=>{
        const num = offset * limit;
         let details = {};
 
-        const check = await Result.find({day:day});
-        const [count, submitted, results]= await Promise.all([
-            Activity.find({day:day}),
-            Activity.find({submitted:1, day:day}),
-            Activity.aggregate([{$match:{day:day}}, {$limit:Number(limit)+num}, {$skip:num}, 
-            {
-                $lookup:{
-                from:"users",
-                localField:"reg_no",
-                foreignField:"reg_no",
-                as:"user"
-                }
-            }
-            ])
+        const [results, submitted] = await Promise.all([
+            Result.find({day:day}),
+            Result.find({day:day, submitted:1}).select('submitted')
         ])
- 
-        results.forEach((result)=>{
-            const subject_id1 =result.user[0].subject1_id;
-            const subject_id2=result.user[0].subject2_id;
-            const subject_id3 =result.user[0].subject3_id;
-            const subject_id4 =result.user[0].subject4_id;
-            const attempted = check.filter(r=>(r.day==day && r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-            const qtotal4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-
-            const c1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const c2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const c3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const c4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-            const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
-            const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
-            const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
-            const qt4 = qtotal4.length> 0? qtotal4[0].amount: 1
-            const total1 = Math.ceil(c1.length*(100/ (qt1)));
-            const total2 = Math.ceil(c2.length*(100/ (qt2)));
-            const total3 = Math.ceil(c3.length*(100/ (qt3)));
-            const total4 = Math.ceil(c4.length*(100/ (qt4)));
-            details[result.reg_no] = {
-                name:result.user[0].name,
-                subject1:result.user[0].subject1,
-                subject2:result.user[0].subject2,
-                subject3:result.user[0].subject3,
-                subject4:result.user[0].subject4,
-                qtotal1:qt1,
-                qtotal2:qt2,
-                qtotal3:qt3,
-                qtotal4:qt4,
-                total1:total1,
-                total2:total2,
-                total3:total3,
-                total4:total4,
-                qtotal:qt1+qt2+qt3+qt4,
-                //'qtotal'=>'180',
-                total:total1+total2+total3+total4,
-                submitted:result.submitted?'<span class="btn btn-primary btn-xs">true</span>':'<span class="btn btn-danger btn-xs">false</span>',
-                attempted:attempted.length,
-            };
-        })
-        details['count']=count.length;
+        details['count']=results.length;
         details['submitted']=submitted.length;
         return res.status(200).json({results:results, details:details})
     }
@@ -886,13 +879,16 @@ router.post('/center', async(req,res)=>{
 })
 router.get('/relogin/:reg_no', async(req,res)=>{
     const {reg_no} = req.params
-    const user = await Activity.findOne({reg_no:reg_no, day:today},null, {sort:{createdAt:-1}});
+    const [user, basic] = await Promise.all([
+        Activity.findOne({reg_no:reg_no, day:today},null, {sort:{createdAt:-1}}),
+        Basic.findOne()
+    ]);
 
     if(user){
         const type = user.paper_type >= 2? 0 : (user.paper_type)+1;
         user.submitted = 0;
         user.paper_type = type;
-        user.time_left = 120 *60;
+        user.time_left = basic.time*60;
         if(user.save())
             return res.status(200).json({message:'successful'});
         else
@@ -931,19 +927,9 @@ router.get('/candidate_export/:start/:end', async(req, res)=>{
 
 router.get('/export/:day', async(req, res)=>{
     const{day}=req.params
-    const check = await Result.find({day:day});
     const [center, results]= await Promise.all([
         Cbt.find(),
-        Activity.aggregate([{$match:{day:day}},
-        {
-            $lookup:{
-            from:"users",
-            localField:"reg_no",
-            foreignField:"reg_no",
-            as:"user"
-            }
-        }
-        ])
+        Result.find({day:day})
     ])
     ws.cell(1,1,1,13, true).string(`${center.length>0?center[0].name.toUpperCase():''} RESULT FOR ${day}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
     ws.cell(2,1).string('S/N').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
@@ -952,39 +938,18 @@ router.get('/export/:day', async(req, res)=>{
     ws.cell(2,5,2,12, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     ws.cell(2,13).string('TOTAL').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     results.forEach((result,i)=>{
-        const subject_id1 =result.user[0].subject1_id;
-        const subject_id2=result.user[0].subject2_id;
-        const subject_id3 =result.user[0].subject3_id;
-        const subject_id4 =result.user[0].subject4_id;
-        const qtotal1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-        const qtotal2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-        const qtotal3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-        const qtotal4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no));
-
-        const c1 = check.filter(r=>(r.day==day && r.subject_id==subject_id1 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const c2 = check.filter(r=>(r.day==day && r.subject_id==subject_id2 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const c3 = check.filter(r=>(r.day==day && r.subject_id==subject_id3 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const c4 = check.filter(r=>(r.day==day && r.subject_id==subject_id4 &&  r.paper_type == result.paper_type && r.reg_no == result.reg_no && r.answer == 1));
-        const qt1 = qtotal1.length> 0? qtotal1[0].amount: 1
-        const qt2 = qtotal2.length> 0? qtotal2[0].amount: 1
-        const qt3 = qtotal3.length> 0? qtotal3[0].amount: 1
-        const qt4 = qtotal4.length> 0? qtotal4[0].amount: 1
-        const total1 = Math.ceil(c1.length*(100/ (qt1)));
-        const total2 = Math.ceil(c2.length*(100/ (qt2)));
-        const total3 = Math.ceil(c3.length*(100/ (qt3)));
-        const total4 = Math.ceil(c4.length*(100/ (qt4)));
         ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
-        ws.cell(i+3,2,i+3,3, true).string(result.user[0].name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,2,i+3,3, true).string(result.name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,4).string(result.reg_no).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
         ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,6).number(total1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,7).string(result.user[0].subject2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,8).number(total2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,9).string(result.user[0].subject3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,10).number(total3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,11).string(result.user[0].subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,12).number(total4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,13).number(total1+total2+total3+total4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:12, bold:true},alignment:{horizontal:'center'}})
+        ws.cell(i+3,6).number(result.details.subject1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,7).string(result.details.subject2_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,8).number(result.details.subject2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,9).string(result.details.subject3_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,10).number(result.details.subject3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,11).string(result.details.subject4_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,12).number(result.details.subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,13).number(result.details.subject1+result.details.subject2+result.details.subject3+result.details.subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:12, bold:true},alignment:{horizontal:'center'}})
     })
     return wb.write(`${center.length>0?center[0].name.toLowerCase():''} result for ${day}.xlsx`, res)
 })
@@ -1161,5 +1126,26 @@ router.get('/refresh', async(req,res)=>{
         })
     })
     return res.status(200).json({message:'Questions Refreshed'});
+})
+
+router.post('/basic', async(req,res)=>{
+    const {time, reg} = req.body
+    if(!time){
+        return  res.status(200).json({message:'Time cannot be empty'});
+    }
+    const basic = await Basic.findOne()
+    if(basic){
+        basic.time = time
+        basic.reg = reg
+        basic.save()
+    }
+    else{
+     const create =   await Basic.create({
+            time,
+            reg
+        })
+        console.log(create)
+    }
+    return res.status(200).json({message:'Basic settings saved'});
 })
 module.exports = router

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose')
 // const url = `mongodb+srv://givitec:givitec2020@cluster0.sd71d.mongonet/cbt?retryWrites=true&w=majority`;
 const url = "mongodb://localhost:27017/user"
-const url1 = "mongodb://localhost:27017/result"
+const url1 = "mongodb://localhost:27017/results"
 const url2 = "mongodb://localhost:27017/admin"
 const url3 = "mongodb://localhost:27017/questions"
 // const connectionParams={

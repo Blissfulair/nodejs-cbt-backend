@@ -3,28 +3,42 @@ const Schema = mongoose.Schema;
 const db = require('../db/config')
 schema = new Schema({
     reg_no:{
-        type:String
+        type:String,
+        index:true,
+        sparse:true
     },
     day:{
-        type:Number,
+        type:String,
     },
-    question_id:{
+    name:{
         type:String,
     },
     amount:{
         type:Number,
     },
-    options:{
-        type:String,
+    subject1:{
+        type:Array,
     },
-    subject_id:{
-        type:String,
+    subject2:{
+        type:Array,
     },
-    answer:{
+    subject3:{
+        type:Array,
+    },
+    subject4:{
+        type:Array,
+    },
+    details:{
+        type:Object
+    },
+    paper_type:{
+        type:Number,
+    },
+    submitted:{
         type:Number,
         default:0
     },
-    paper_type:{
+    answered:{
         type:Number,
     },
     createdAt:{
