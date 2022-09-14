@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const { async } = require('rxjs');
 const db = require('../db/config')
 const Schema = mongoose.Schema;
 

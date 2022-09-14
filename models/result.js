@@ -22,12 +22,14 @@ schema = new Schema({
     subject2:{
         type:Array,
     },
-    subject3:{
-        type:Array,
-    },
-    subject4:{
-        type:Array,
-    },
+    // subject3:{
+    //     type:Array,
+    //     default:[]
+    // },
+    // subject4:{
+    //     type:Array,
+    //     default:[]
+    // },
     details:{
         type:Object
     },
