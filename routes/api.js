@@ -21,8 +21,7 @@ const nodemailer = require('nodemailer');
 
 
 const Excel = require('excel4node')
-const wb = new Excel.Workbook()
-const ws = wb.addWorksheet('Sheet 1')
+
 
 const authMiddleware = require('../middleware/auth')
 const authMiddleware2 = require('../middleware/auth2')
@@ -171,6 +170,8 @@ router.get('/token', authMiddleware, (req, res)=>{
         subject4:req.user.subject4,
         image:req.user.image,
         name:req.user.name,
+        subjects:req.user.subjects,
+        subjectsID:req.user.subjectsID,
         id1:req.user.subject1_id,
         id2:req.user.subject2_id,
         id3:req.user.subject3_id,
@@ -192,7 +193,8 @@ router.get('/activity/:id', async(req,res)=>{
                     reg_no:user.reg_no,
                     time_left:basic.time*60,
                     day:today,
-                    paper_type: 0//substr(str_shuffle('012'), 1,1),
+                    type: 'abcd'.shuffle().substr(1,1),
+                    paper_type: 1//substr(str_shuffle('012'), 1,1),
                 });
             }
             else if(activity.time_left <= 0){
@@ -228,33 +230,37 @@ router.post('/setting', async(req,res)=>{
         console.log(e)
     }
 })
-router.get('/questions/:reg_no/:subject1/:subject2/:subject3/:subject4', async(req,res)=>{
-    const {reg_no, subject1,subject2,subject3,subject4} = req.params
+router.get('/questions/:reg_no/:subjectsID', async(req,res)=>{
+    const {reg_no, subjectsID} = req.params
+    const arr = JSON.parse(subjectsID)
     try{
         const activity = await Activity.findOne({reg_no:reg_no, day:today})
+        
         if(activity){
-        const [subj1, subj2,subj3,subj4] = await Promise.all([
-            Subject.findOne({name:{ $regex: '.*'+subject1+'.*', $options:'i'}}),
-            Subject.findOne({name:{ $regex: '.*'+subject2+'.*', $options:'i'}}),
-            Subject.findOne({name:{ $regex: '.*'+subject3+'.*', $options:'i'}}),
-            Subject.findOne({name:{ $regex: '.*'+subject4+'.*', $options:'i'}})
-        ])
-        const [s1,s2,s3,s4] = await Promise.all([
-            require(`../models/${subj1.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(60),
-            require(`../models/${subj2.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40),
-            require(`../models/${subj3.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40),
-            require(`../models/${subj4.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:-1}}).limit(40)
-        ])
-        return res.status(200).json({
-                                subject1:s1, 
-                                subject1_id:subj1.id, 
-                                subject2:s2, 
-                                subject2_id:subj2.id,
-                                subject3:s3, 
-                                subject3_id:subj3.id,
-                                subject4:s4, 
-                                subject4_id:subj4.id
-                            });
+            const subjects = []
+            arr.forEach(subject=>subjects.push(Subject.findById(subject)))
+            const subjs = await Promise.all(subjects)
+        // const [subj1, subj2,subj3,subj4] = await Promise.all([
+        //     Subject.findOne({name:{ $regex: '.*'+subject1+'.*', $options:'i'}}),
+        //     Subject.findOne({name:{ $regex: '.*'+subject2+'.*', $options:'i'}}),
+        //     Subject.findOne({name:{ $regex: '.*'+subject3+'.*', $options:'i'}}),
+        //     Subject.findOne({name:{ $regex: '.*'+subject4+'.*', $options:'i'}})
+        // ])
+        const ques = []
+        subjs.forEach(subj=>ques.push(require(`../models/${subj.model}`).find({paper_type:activity.paper_type},null, {sort:{[activity.type]:-1}}).limit(20)))
+        // const [s1,s2,s3,s4] = await Promise.all([
+        //     require(`../models/${subj1.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:1}}).limit(60),
+        //     require(`../models/${subj2.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:1}}).limit(40),
+        //     require(`../models/${subj3.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:1}}).limit(40),
+        //     require(`../models/${subj4.model}`).find({paper_type:activity.paper_type},null, {sort:{createdAt:1}}).limit(40)
+        // ])
+        const questions = await Promise.all(ques)
+        const json = {}
+        subjs.forEach((subj, i)=>{
+            json[`subject${i+1}`]=questions[i],
+            json[`subject${i+1}_id`]=subj._id
+        })
+        return res.status(200).json(json);
         }
     }
     catch(e){
@@ -270,19 +276,28 @@ router.get('/answered/:reg_no/:s1/:s2/:s3/:s4/:paper_type', async(req,res)=>{
                 day:today
             })
         if(answered)
-        return res.status(200).json({results:{
-            subject1:answered.subject1,
-            subject2:answered.subject2,
-            subject3:answered.subject3,
-            subject4:answered.subject4,
-        }, total:answered.subject1.length+answered.subject2.length+answered.subject3.length+answered.subject4.length});
+        {
+            const length = Object.keys(answered.subjects).length
+            let total = 0
+             for(let i = 1; i<=length; i++)
+             total+=answered.subjects[`subject${i}`].length
+
+             return res.status(200).json({results:{
+                ...answered.subjects,
+            }, total:total});
+        }
+
         else
-        return res.status(200).json({results:{
-            subject1:[],
-            subject2:[],
-            subject3:[],
-            subject4:[],
-        }, total:0});
+        {
+            const user = await User.findOne({reg_no:reg_no})
+            const result = {}
+            user.subjects.forEach((subject,i)=>{
+                result[`subject${i+1}`] = []
+            })
+            return res.status(200).json({results:{
+                ...result
+            }, total:0});
+       }
     }
     catch(e){
         console.log(e)
@@ -304,17 +319,25 @@ router.patch('/time', async(req,res)=>{
 router.post('/save_answers', async(req,res)=>{
     try{
 
+        // const {
+        //     name, 
+        //     reg_no, 
+        //     subject1_name, 
+        //     subject1, 
+        //     subject2_name, 
+        //     subject2,  
+        //     subject3_name, 
+        //     subject3,  
+        //     subject4_name, 
+        //     subject4,
+        //     question,
+        //     paper_type
+        // } = req.body
         const {
             name, 
             reg_no, 
-            subject1_name, 
-            subject1, 
-            subject2_name, 
-            subject2,  
-            subject3_name, 
-            subject3,  
-            subject4_name, 
-            subject4,
+            subject_names, 
+            subjects,
             question,
             paper_type
         } = req.body
@@ -326,20 +349,17 @@ router.post('/save_answers', async(req,res)=>{
         })
 
         let details = {
-            subject1:0,
-            subject2:0,
-            subject3:0,
-            subject4:0,
-            subject1_name,
-            subject2_name,
-            subject3_name,
-            subject4_name,
+            ...subject_names
         }
-        let numberAnswered = subject1.length + subject2.length + subject3.length + subject4.length
-        let questionTotal =question.s1Total+question.s2Total+question.s3Total+question.s4Total
-        for(let i=1; i <= 4; i++){
+        const len = (subjects != null || subjects != undefined) ? Object.keys(subjects).length:0
+        let questionTotal = 0;
+        let numberAnswered =0 
+        for(let i=1; i <= len; i++){
+            numberAnswered += subjects[`subject${i}`].length
+            details[`subject${i}`]=0
+            questionTotal += question[`s${i}Total`]
             let score=0;
-            const questions = req.body['subject'+i]
+            const questions = req.body['subjects']['subject'+i]
             if(questions.length > 0){
                 questions.forEach(async(quest, j )=>{
                         let ans = 0
@@ -351,44 +371,50 @@ router.post('/save_answers', async(req,res)=>{
                         }else{
                             ans = 0;
                         }
-                        switch(i){
-                            case 1:
-                                subject1[j]['createdAt'] = new Date()
-                            break;
-                            case 2:
-                                subject2[j]['createdAt'] = new Date()
-                            break;
-                            case 3:
-                                subject3[j]['createdAt'] = new Date()
-                            break;
-                            case 4:
-                                subject4[j]['createdAt'] = new Date()
-                            break;
-                        }
+                        subjects[`subject${i}`][j]['createdAt'] = new Date()
+                        // switch(i){
+                        //     case 1:
+                        //         subject1[j]['createdAt'] = new Date()
+                        //     break;
+                        //     case 2:
+                        //         subject2[j]['createdAt'] = new Date()
+                        //     break;
+                        //     case 3:
+                        //         subject3[j]['createdAt'] = new Date()
+                        //     break;
+                        //     case 4:
+                        //         subject4[j]['createdAt'] = new Date()
+                        //     break;
+                        // }
+                       
 
                     }
                      else{
                          ans = quest['answer']
                          score += quest['answer']
                     }
-                    switch(i){
-                        case 1:
-                            details['subject1'] = Math.ceil(score*(100/question.s1Total))
-                            subject1[j]['answer'] = ans
-                        break;
-                        case 2:
-                            details['subject2'] = Math.ceil(score*(100/ question.s2Total))
-                            subject2[j]['answer'] = ans
-                        break;
-                        case 3:
-                            details['subject3'] = Math.ceil(score*(100/question.s3Total))
-                            subject3[j]['answer'] = ans
-                        break;
-                        case 4:
-                            details['subject4'] = Math.ceil(score*(100/ question.s4Total))
-                            subject4[j]['answer'] = ans
-                        break;
-                    }
+                    
+                    let stotal = question[`s${i}Total`]
+                    details[`subject${i}`]= Math.ceil(score*(100/stotal))
+                    subjects[`subject${i}`][j]['answer'] = ans
+                    // switch(i){
+                    //     case 1:
+                    //         details['subject1'] = Math.ceil(score*(100/question.s1Total))
+                    //         subject1[j]['answer'] = ans
+                    //     break;
+                    //     case 2:
+                    //         details['subject2'] = Math.ceil(score*(100/ question.s2Total))
+                    //         subject2[j]['answer'] = ans
+                    //     break;
+                    //     case 3:
+                    //         details['subject3'] = Math.ceil(score*(100/question.s3Total))
+                    //         subject3[j]['answer'] = ans
+                    //     break;
+                    //     case 4:
+                    //         details['subject4'] = Math.ceil(score*(100/ question.s4Total))
+                    //         subject4[j]['answer'] = ans
+                    //     break;
+                    // }
                 })
             }
         }
@@ -397,23 +423,22 @@ router.post('/save_answers', async(req,res)=>{
                 answer = await Result.create({
                     name,
                     reg_no,
-                    subject1,
-                    subject2,
-                    subject3,
-                    subject4,
+                    ...subjects,
                     day:today,
+                    subjects:subjects,
                     paper_type,
                     details,
                     amount:questionTotal,
-                    answered:numberAnswered
+                    answered:numberAnswered,
+                    submitted:0
                 })
             }
             else{
-                answer.subject1 = subject1
-                answer.subject2 = subject2
-                answer.subject3 = subject3
-                answer.subject4 = subject4
+                for(let k=1; k <= len; k++){
+                    answer[`subject${k}`] = subjects[`subject${k}`]
+                }
                 answer.details = details
+                answer.subjects = subjects
                 answer.amount = questionTotal
                 answer.answered = numberAnswered
                 answer.save()
@@ -437,7 +462,7 @@ router.patch('/end_exam', async(req, res)=>{
             }
             activity.submitted = 1;
             if(activity.save()){
-               const result =  await Result.findOne({reg_no:reg_no})
+               const result =  await Result.findOne({reg_no:reg_no, day:today})
                 result.submitted = 1
                 result.save()
                 return res.status(200).json({status:'success', message:'successfully submited', activity:activity});
@@ -535,7 +560,6 @@ router.get('/subjects', async(req,res)=>{
 
 router.post('/save_candidate', async(req,res)=>{
     const {name,email,phone,reg_no} = req.body
-    console.log(name,email)
     try{
         const subjects = JSON.parse(req.body.subjects);
         const subjectsID = JSON.parse(req.body.subjectsID)
@@ -551,14 +575,16 @@ router.post('/save_candidate', async(req,res)=>{
                 phone:phone,
                 email:email,
                 reg_no:reg_no,
-                subject1:subjects[0],
-                subject2:subjects[1],
-                subject3:subjects[2],
-                subject4:subjects[3],
-                subject1_id:subjectsID[0],
-                subject2_id:subjectsID[1],
-                subject3_id:subjectsID[2],
-                subject4_id:subjectsID[3],
+                subjects,
+                subjectsID,
+                // subject1:subjects[0],
+                // subject2:subjects[1],
+                // subject3:subjects[2],
+                // subject4:subjects[3],
+                // subject1_id:subjectsID[0],
+                // subject2_id:subjectsID[1],
+                // subject3_id:subjectsID[2],
+                // subject4_id:subjectsID[3],
                 image:filename,
                 password:password
             });
@@ -648,12 +674,8 @@ router.post('/candidate_update', async(req,res)=>{
         if(filename)
         candidate.image= filename;
         if(subjects.length>1){
-            candidate.subject2= subjects[1];
-            candidate.subject3= subjects[2];
-            candidate.subject4= subjects[3];
-            candidate.subject2_id= subjectsID[1];
-            candidate.subject3_id= subjectsID[2];
-            candidate.subject4_id= subjectsID[3];
+            candidate.subjects= subjects;
+            candidate.subjectsID= subjectsID;
         }
         // candidate.subject2= $request->subject2;
         // candidate.subject3= $request->subject3;
@@ -747,7 +769,8 @@ router.get('/manage_question/:id/:limit/:offset', async(req,res)=>{
     try{
         const num = offset * limit;
             const subject = await Subject.findById(id);
-            const questions = await require(`../models/${subject.model}`).aggregate([{$sort:{createdAt:-1}}])//({order:[['createdAt', 'DESC']], limit:limit, offset:num});
+            const Model = require(`../models/${subject.model}`)
+            const questions = await Model.find({}, null, {sort:{_id:-1}}) //({order:[['createdAt', 'DESC']], limit:limit, offset:num});
             return res.status(200).json({message:'updated', subject:subject.name, questions:questions});
     }
     catch(e){console.log}
@@ -885,9 +908,9 @@ router.get('/relogin/:reg_no', async(req,res)=>{
     ]);
 
     if(user){
-        const type = user.paper_type >= 2? 0 : (user.paper_type)+1;
+        //const type = user.paper_type >= 2? 0 : (user.paper_type)+1;
         user.submitted = 0;
-        user.paper_type = type;
+        user.paper_type = 0;
         user.time_left = basic.time*60;
         if(user.save())
             return res.status(200).json({message:'successful'});
@@ -905,22 +928,25 @@ router.get('/export_candidate/:start/:end', async(req, res)=>{
     catch(e){console.log(e)}
 })
 router.get('/candidate_export/:start/:end', async(req, res)=>{
+    const wb = new Excel.Workbook()
+const ws = wb.addWorksheet('Sheet 1')
     const{start,end}=req.params
     const center = await Cbt.find();
     const candidates = await User.aggregate([{$match:{createdAt:{$gte:new Date(start), $lte:new Date(end)}}}]);
-    ws.cell(1,1,1,8, true).string(`LIST OF REGISTERED CANDIDATES FROM ${start} TO ${end}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
+    ws.cell(1,1,1,9, true).string(`LIST OF REGISTERED CANDIDATES FROM ${start} TO ${end}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
     ws.cell(2,1).string('S/N').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     ws.cell(2,2,2,3, true).string('NAMES').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     ws.cell(2,4).string('REG NO').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
-    ws.cell(2,5,2,8, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,5,2,9, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     candidates.forEach((candidate, i)=>{
-        ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
-        ws.cell(i+3,2,i+3,3, true).string(candidate.name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,1).string((i+1).toString()).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
+        ws.cell(i+3,2,i+3,3, true).string(candidate.name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9, transform:'uppercase'}})
         ws.cell(i+3,4).string(candidate.reg_no).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
-        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,6).string(candidate.subject2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,7).string(candidate.subject3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,8).string(candidate.subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,5).string(candidate.subjects[0]).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,6).string(candidate.subjects[1]).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,7).string(candidate.subjects[2]).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,8).string(candidate.subjects[3]).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,9).string(candidate.subjects[4]).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
     })
     return wb.write(`${center.length>0?center[0].name.toLowerCase():''} candidate list for ${start} to ${end}.xlsx`, res)
 })
@@ -931,17 +957,19 @@ router.get('/export/:day', async(req, res)=>{
         Cbt.find(),
         Result.find({day:day})
     ])
-    ws.cell(1,1,1,13, true).string(`${center.length>0?center[0].name.toUpperCase():''} RESULT FOR ${day}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
+    const wb = new Excel.Workbook()
+    const ws = wb.addWorksheet('Sheet 1')
+    ws.cell(1,1,1,15, true).string(`${center.length>0?center[0].name.toUpperCase():''} RESULT FOR ${day}`).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:14},alignment:{horizontal:'center'}})
     ws.cell(2,1).string('S/N').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     ws.cell(2,2,2,3, true).string('NAME').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     ws.cell(2,4).string('REG NO').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
-    ws.cell(2,5,2,12, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
-    ws.cell(2,13).string('TOTAL').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,5,2,14, true).string('SUBJECTS').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
+    ws.cell(2,15).string('TOTAL').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:10},alignment:{horizontal:'center'}})
     results.forEach((result,i)=>{
         ws.cell(i+3,1).number(i+1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
         ws.cell(i+3,2,i+3,3, true).string(result.name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,4).string(result.reg_no).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9},alignment:{horizontal:'center'}})
-        ws.cell(i+3,5).string('Use of English').style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,5).string(result.details.subject1_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,6).number(result.details.subject1).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,7).string(result.details.subject2_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,8).number(result.details.subject2).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
@@ -949,10 +977,40 @@ router.get('/export/:day', async(req, res)=>{
         ws.cell(i+3,10).number(result.details.subject3).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,11).string(result.details.subject4_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
         ws.cell(i+3,12).number(result.details.subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
-        ws.cell(i+3,13).number(result.details.subject1+result.details.subject2+result.details.subject3+result.details.subject4).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:12, bold:true},alignment:{horizontal:'center'}})
+        ws.cell(i+3,13).string(result.details.subject5_name).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,14).number(result.details.subject5).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:9}})
+        ws.cell(i+3,15).number(result.details.subject1+result.details.subject2+result.details.subject3+result.details.subject4+result.details.subject5).style({border:{bottom:{style:'thin',color:'black'},top:{style:'thin',color:'black'},right:{style:'thin',color:'black'},left:{style:'thin',color:'black'}},font:{size:12, bold:true},alignment:{horizontal:'center'}})
     })
     return wb.write(`${center.length>0?center[0].name.toLowerCase():''} result for ${day}.xlsx`, res)
 })
+
+
+
+
+router.get('/export_questions/:id', async(req, res)=>{
+    const{id}=req.params
+    const subject = await Subject.findById(id);
+    const questions = await require(`../models/${subject.model}`).find({});
+    const wb = new Excel.Workbook()
+    const ws = wb.addWorksheet('Sheet 1')
+    questions.forEach((question, i)=>{
+        ws.cell(i+1,1).string((i+1).toString())
+        ws.cell(i+1,2).string(question.question)
+        ws.cell(i+1,3).string(question.image?question.image.split('questions/')[1]:'NULL')
+        ws.cell(i+1,4).string(question.a)
+        ws.cell(i+1,5).string(question.b)
+        ws.cell(i+1,6).string(question.c)
+        ws.cell(i+1,7).string(question.d)
+        ws.cell(i+1,8).string(question.answer)
+        ws.cell(i+1,9).string(question.paper_type.toString())
+        // ws.cell(i+1,10).date(question.createdAt)
+        // ws.cell(i+1,11).date(question.updatedAt)
+    })
+    return wb.write(`${subject.model}.xlsx`, res)
+})
+
+
+
 router.post('/import_questions', async(req,res)=>{
     const path = 'db'
     try{
@@ -976,7 +1034,7 @@ router.post('/import_questions', async(req,res)=>{
                            c:row[5],
                            d:row[6],
                            answer:row[7],
-                           paper_type:row[8]
+                           paper_type:1//row[8]
                        })
 
                    })
@@ -987,6 +1045,71 @@ router.post('/import_questions', async(req,res)=>{
                   }
                }
            })
+           fs.unlinkSync(file)
+           return  res.status(200).json({message:'Uploaded Successfully'})
+       }
+       return res.status(200).json({message:'Required Files are missing'})
+    }
+    catch(e){console.log(e)}
+    
+})
+
+
+
+router.post('/import_candidates', async(req,res)=>{
+    const path = 'db'
+    try{
+        const file = await uploadFile(req, path)
+        if(file == 'file')
+        return  res.status(200).json({message:'This file is already uploaded'})
+        const destination = pa.join(__dirname, `/../public/uploads/questions/`)
+       if(file){
+        let files = await decompress(file, destination)
+        files = files[0]
+               if(files.path.includes('.xlsx')){
+                   const data = []
+                   const rows = await readXlsxFile(destination + files.path)
+                   let k = 0
+                   rows.forEach(async (row,i)=>{
+                        if(row[5] != null){
+                            if(k == 0)
+                            k= i
+                            const [
+                                sub1,
+                                sub2,
+                                sub3,
+                                sub4,
+                                sub5,
+                                password
+                            ]= await Promise.all([
+                                Subject.findOne({name:row[4]}),
+                                Subject.findOne({name:row[5]}),
+                                Subject.findOne({name:row[6]}),
+                                Subject.findOne({name:row[7]}),
+                                Subject.findOne({name:row[8]}),
+                                bcrypt.hash(row[3], bcrypt.genSaltSync(8))
+                            ])
+                           data .push({
+                               name :row[1],
+                               phone:'jskjkls',
+                               email:row[1]+i+'@gmail.com',
+                               reg_no:row[3],
+                               subjects:[row[4],row[5],row[6],row[7], row[8]],
+                               subjectsID:[sub1._id,sub2._id, sub3._id,sub4._id,sub5._id],
+                               image:null,
+                               password:password
+                           })
+                           if((data.length + k) == rows.length){
+                            const create= await User.insertMany(data)
+                            if(create){
+                                fs.unlinkSync(destination + files.path)
+                            }
+                           }
+
+                        }
+                   })
+
+               }
            fs.unlinkSync(file)
            return  res.status(200).json({message:'Uploaded Successfully'})
        }

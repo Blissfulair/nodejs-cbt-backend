@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const { async } = require('rxjs');
 const db = require('../db/config')
 const Schema = mongoose.Schema;
 
@@ -12,6 +11,9 @@ const schema = new Schema({
     },
     paper_type:{
         type:Number,
+    },
+    type:{
+        type:String,
     },
     day:{
         type:String,
@@ -38,4 +40,4 @@ const schema = new Schema({
 //     console.log('here')
 //     await db.user.model('activity', schema)
 // }
-module.exports = db.user.model('activity', schema)
+module.exports = db.mk_user.model('activity', schema)

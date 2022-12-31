@@ -17,29 +17,11 @@ const schema = new Schema({
         type:String,
         unique:true
     },
-    subject1:{
-        type:String,
+    subjects:{
+        type:Array,
     },
-    subject1_id:{
-        type:String,
-    },
-    subject2:{
-        type:String,
-    },
-    subject2_id:{
-        type:String,
-    },
-    subject3:{
-        type:String,
-    },
-    subject3_id:{
-        type:String,
-    },
-    subject4:{
-        type:String,
-    },
-    subject4_id:{
-        type:String,
+    subjectsID:{
+        type:Array,
     },
     image:{
         type:String,
@@ -56,4 +38,4 @@ const schema = new Schema({
         default:Date.now()
     }
 })
-module.exports = db.user.model('user', schema)
+module.exports = db.mk_user.model('user', schema)

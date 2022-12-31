@@ -37,4 +37,4 @@ const mongoose = require('mongoose')
             default:Date.now()
         }
     })
-    module.exports = db.mk_questions.model('government', schema)
+    module.exports = db.mk_questions.model('english', schema)

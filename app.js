@@ -27,11 +27,11 @@ app.use(express.static(path.join(__dirname, '')))
 app.use('/api',api)
 app.use(web)
 // require('./middleware/socket')(websocket)
-server.listen(5000, ()=>console.log(` 
+server.listen(process.env.PORT,'127.0.0.1', ()=>console.log(` 
         ###       ###
       ######    ######
     ######### #########
-   http://localhost:5000
+   http://localhost:${process.env.PORT}
     ######### #########
       ######    ######
         ###       ###

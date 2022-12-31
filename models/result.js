@@ -16,19 +16,22 @@ schema = new Schema({
     amount:{
         type:Number,
     },
-    subject1:{
-        type:Array,
-    },
-    subject2:{
-        type:Array,
-    },
-    subject3:{
-        type:Array,
-    },
-    subject4:{
-        type:Array,
-    },
+    // subject1:{
+    //     type:Array,
+    // },
+    // subject2:{
+    //     type:Array,
+    // },
+    // subject3:{
+    //     type:Array,
+    // },
+    // subject4:{
+    //     type:Array,
+    // },
     details:{
+        type:Object
+    },
+    subjects:{
         type:Object
     },
     paper_type:{
@@ -51,4 +54,4 @@ schema = new Schema({
     }
 })
 
-module.exports = db.result.model('result', schema)
+module.exports = db.mk_result.model('result', schema)

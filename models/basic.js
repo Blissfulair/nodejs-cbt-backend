@@ -17,4 +17,4 @@ const schema = new Schema({
         default:Date.now()
     }
 })
-module.exports = db.admin.model('basic', schema)
+module.exports = db.mk_admin.model('basic', schema)

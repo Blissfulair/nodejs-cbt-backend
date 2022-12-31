@@ -1,9 +1,9 @@
 const mongoose = require('mongoose')
 // const url = `mongodb+srv://givitec:givitec2020@cluster0.sd71d.mongonet/cbt?retryWrites=true&w=majority`;
-const url = "mongodb://localhost:27017/user"
-const url1 = "mongodb://localhost:27017/results"
-const url2 = "mongodb://localhost:27017/admin"
-const url3 = "mongodb://localhost:27017/questions"
+const url = "mongodb://127.0.0.1:27017/lapo_mk_user"
+const url1 = "mongodb://127.0.0.1:27017/lapo_mk_results"
+const url2 = "mongodb://127.0.0.1:27017/lapo_mk_admin"
+const url3 = "mongodb://127.0.0.1:27017/lapo_mk_questions"
 // const connectionParams={
 //     useNewUrlParser: true,
 //     useCreateIndex: true,
@@ -15,7 +15,7 @@ const connectionParams={
     useUnifiedTopology: true ,
     poolSize:5
 }
-mongoose.user = mongoose.createConnection(url,connectionParams)
+mongoose.mk_user = mongoose.createConnection(url,connectionParams)
 // .then(async (e)=>{
 //   try{
 //     console.log('db is connected',e.db.databaseName)
@@ -28,7 +28,7 @@ mongoose.user = mongoose.createConnection(url,connectionParams)
 //   console.log(e)
 //   // process.exit(1)
 // })
-mongoose.result = mongoose.createConnection(url1,connectionParams)
+mongoose.mk_result = mongoose.createConnection(url1,connectionParams)
 // .then(async (e)=>{
 //     try{
 //       console.log('db is connected',e.db.databaseName)
@@ -41,7 +41,7 @@ mongoose.result = mongoose.createConnection(url1,connectionParams)
 //     console.log(e)
 //     // process.exit(1)
 //   })
-mongoose.admin = mongoose.createConnection(url2,connectionParams)
+mongoose.mk_admin = mongoose.createConnection(url2,connectionParams)
 // .then(async (e)=>{
 //     try{
 //       console.log('db is connected',e.db.databaseName)
@@ -58,7 +58,7 @@ mongoose.admin = mongoose.createConnection(url2,connectionParams)
 //     console.log(e)
 //     // process.exit(1)
 //   })
-mongoose.questions = mongoose.createConnection(url3,connectionParams)
+mongoose.mk_questions = mongoose.createConnection(url3,connectionParams)
 // .then(async (e)=>{
 //     try{
 //       console.log('db is connected',e.db.databaseName)

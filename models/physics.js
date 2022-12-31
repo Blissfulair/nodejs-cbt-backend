@@ -37,4 +37,4 @@ const mongoose = require('mongoose')
             default:Date.now()
         }
     })
-    module.exports = db.questions.model('physics', schema)
+    module.exports = db.mk_questions.model('physics', schema)

@@ -14,4 +14,4 @@ const schema = new Schema({
         default:Date.now()
     }
 })
-module.exports = db.user.model('cbt', schema)
+module.exports = db.mk_user.model('cbt', schema)
